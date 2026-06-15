@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Hitech hublet ",
+  "description": "Hublet app for a digital tech company ",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

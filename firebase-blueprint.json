@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "Review": {
+      "title": "Customer Review",
+      "description": "Feedback and rating submitted by a customer.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique review ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "DisplayName of the customer."
+        },
+        "rating": {
+          "type": "number",
+          "description": "Rating score between 1 and 5."
+        },
+        "text": {
+          "type": "string",
+          "description": "Content of the safety/quality review."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO format date or datetime string."
+        }
+      },
+      "required": ["id", "name", "rating", "text", "timestamp"]
+    },
+    "RepairRecord": {
+      "title": "Repair Record",
+      "description": "Repair tracking event generated for local repairs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Repair identifier."
+        },
+        "type": {
+          "type": "string",
+          "description": "Device classification (Laptop, Desktop, etc.)."
+        },
+        "brand": {
+          "type": "string",
+          "description": "Hardware device make (HP, etc.)."
+        },
+        "problem": {
+          "type": "string",
+          "description": "Brief description of the malfunction."
+        },
+        "name": {
+          "type": "string",
+          "description": "Unique client name details."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Client contact phone number."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Referential tracking tag starting with HT-."
+        },
+        "status": {
+          "type": "string",
+          "description": "Processing status state of the system."
+        },
+        "submitted": {
+          "type": "string",
+          "description": "Submission ISO date string."
+        },
+        "stages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Workflow checklist progression log."
+        },
+        "aiTriage": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string" },
+            "complexity": { "type": "string" },
+            "explanation": { "type": "string" }
+          },
+          "required": ["category", "complexity", "explanation"],
+          "description": "Gemini diagnostics breakdown report."
+        }
+      },
+      "required": ["id", "type", "brand", "problem", "name", "phone", "ref", "status", "submitted", "stages"]
+    },
+    "GMRequest": {
+      "title": "General Manager Request",
+      "description": "Escalated General Manager or VIP Customer Enquiry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique request ID."
+        },
+        "type": {
+          "type": "string",
+          "description": "Category of partnership or critical request."
+        },
+        "msg": {
+          "type": "string",
+          "description": "Core body text content of request."
+        },
+        "name": {
+          "type": "string",
+          "description": "Business partner or customer contact name."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Partner contact mobile."
+        },
+        "preferredTime": {
+          "type": "string",
+          "description": "Time preferences for callback."
+        },
+        "ts": {
+          "type": "string",
+          "description": "Insertion timestamp."
+        },
+        "status": {
+          "type": "string",
+          "description": "Pending or Addressed status."
+        }
+      },
+      "required": ["id", "type", "msg", "name", "phone", "preferredTime", "ts", "status"]
+    },
+    "GalleryPhoto": {
+      "title": "Gallery Image",
+      "description": "Live custom store photo or Gemini asset bound to a product code.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique photo card id."
+        },
+        "url": {
+          "type": "string",
+          "description": "The base64 string or public cloud image URL."
+        },
+        "label": {
+          "type": "string",
+          "description": "Binding descriptive label."
+        },
+        "sub": {
+          "type": "string",
+          "description": "Technical specifications overlay."
+        },
+        "productCode": {
+          "type": "string",
+          "description": "Associated Inventory Standard Part Number."
+        },
+        "price": {
+          "type": "string",
+          "description": "Visual cash/rate equivalent."
+        },
+        "isCustom": {
+          "type": "boolean",
+          "description": "Declares if this is a custom uploaded media image."
+        }
+      },
+      "required": ["id", "url", "label", "sub", "productCode", "price", "isCustom"]
+    }
+  },
+  "firestore": {
+    "reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Client feedback comments collection."
+    },
+    "repairs/{repairId}": {
+      "schema": { "$ref": "#/entities/RepairRecord" },
+      "description": "Repair diagnostics status tracking registry."
+    },
+    "gmq/{gmqId}": {
+      "schema": { "$ref": "#/entities/GMRequest" },
+      "description": "Direct communication requests submitted for GM processing."
+    },
+    "gallery/{galleryId}": {
+      "schema": { "$ref": "#/entities/GalleryPhoto" },
+      "description": "Live portfolio image cards for showcasing items."
+    }
+  }
+}

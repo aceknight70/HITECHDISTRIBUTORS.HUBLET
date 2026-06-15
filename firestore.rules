@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net - catch-all default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for common access conditions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // HELPER: Validate client-provided Reviews
+    function isValidReview(data) {
+      return data.keys.hasAll(['id', 'name', 'rating', 'text', 'timestamp'])
+        && data.keys.size() == 5
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 128
+        && (data.rating is int || data.rating is float) && data.rating >= 1 && data.rating <= 5
+        && data.text is string && data.text.size() <= 5000
+        && data.timestamp is string && data.timestamp.size() <= 128;
+    }
+
+    // HELPER: Validate client-provided Repair tracking tickets
+    function isValidRepairRecord(data) {
+      return data.keys.hasAll(['id', 'type', 'brand', 'problem', 'name', 'phone', 'ref', 'status', 'submitted', 'stages'])
+        && (data.keys.size() == 10 || (data.keys.size() == 11 && data.keys.hasAll(['aiTriage'])))
+        && data.id is string && data.id.size() <= 128
+        && data.type is string && data.type.size() <= 64
+        && data.brand is string && data.brand.size() <= 128
+        && data.problem is string && data.problem.size() <= 2000
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 64
+        && data.ref is string && data.ref.size() <= 64
+        && data.status is string && data.status.size() <= 64
+        && data.submitted is string && data.submitted.size() <= 128
+        && data.stages is list && data.stages.size() <= 100
+        && (!data.keys.hasAll(['aiTriage']) || (
+             data.aiTriage is map 
+             && data.aiTriage.keys.hasAll(['category', 'complexity', 'explanation'])
+             && data.aiTriage.keys.size() == 3
+             && data.aiTriage.category is string && data.aiTriage.category.size() <= 128
+             && data.aiTriage.complexity is string && data.aiTriage.complexity.size() <= 64
+             && data.aiTriage.explanation is string && data.aiTriage.explanation.size() <= 5000
+           ));
+    }
+
+    // HELPER: Validate client-provided GM Request
+    function isValidGMRequest(data) {
+      return data.keys.hasAll(['id', 'type', 'msg', 'name', 'phone', 'preferredTime', 'ts', 'status'])
+        && data.keys.size() == 8
+        && data.id is string && data.id.size() <= 128
+        && data.type is string && data.type.size() <= 128
+        && data.msg is string && data.msg.size() <= 5000
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 64
+        && data.preferredTime is string && data.preferredTime.size() <= 128
+        && data.ts is string && data.ts.size() <= 128
+        && data.status is string && data.status.size() <= 64;
+    }
+
+    // HELPER: Validate client-provided GalleryPhoto card
+    function isValidGalleryPhoto(data) {
+      return data.keys.hasAll(['id', 'url', 'label', 'sub', 'productCode', 'price', 'isCustom'])
+        && data.keys.size() == 7
+        && data.id is string && data.id.size() <= 128
+        && data.url is string && data.url.size() <= 1000000 
+        && data.label is string && data.label.size() <= 256
+        && data.sub is string && data.sub.size() <= 1000
+        && data.productCode is string && data.productCode.size() <= 128
+        && data.price is string && data.price.size() <= 128
+        && data.isCustom is bool;
+    }
+
+    // Rule match block: Reviews
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isValidId(reviewId) && isValidReview(request.resource.data);
+      allow update, delete: if isSignedIn();
+    }
+
+    // Rule match block: Repair diagnostic tickets
+    match /repairs/{repairId} {
+      allow read: if true;
+      // Anyone can log / request a new diagnostic ticket
+      allow create: if isValidId(repairId) && isValidRepairRecord(request.resource.data);
+      // Only authorized staff updates statuses or overrides queue
+      allow update: if isValidId(repairId) && isValidRepairRecord(request.resource.data) && (
+        isSignedIn() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+      );
+      allow delete: if isSignedIn();
+    }
+
+    // Rule match block: GM Requests
+    match /gmq/{gmqId} {
+      // Direct enquiries can only be read/listed by signing-in staff backoffice
+      allow read: if isSignedIn();
+      allow create: if isValidId(gmqId) && isValidGMRequest(request.resource.data);
+      allow update, delete: if isSignedIn();
+    }
+
+    // Rule match block: Gallery Images
+    match /gallery/{galleryId} {
+      allow read: if true;
+      allow create, update: if isValidId(galleryId) && isValidGalleryPhoto(request.resource.data);
+      allow delete: if isSignedIn() || (resource.data.isCustom == true);
+    }
+  }
+}
