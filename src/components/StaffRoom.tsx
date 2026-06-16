@@ -3039,7 +3039,7 @@ export default function StaffRoom({
                         ✓ OPTION A: Quick Github Export
                       </div>
                       <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
-                        Click the <strong>Settings Icon (Gear)</strong> in the topmost right corner of this AI Studio environment, and click <strong>"Export to GitHub"</strong>. This directly commits and pushes all images in your <code>/uploads</code> directory to your repository, auto-redeploying your website instantly!
+                        Click the <strong>Settings Icon (Gear)</strong> in the topmost right corner of this AI Studio environment, and click <strong>"Export to GitHub"</strong>. This directly commits and pushes all images in your <code>/public/uploads</code> directory to your repository, auto-redeploying your website instantly!
                       </p>
                     </div>
 
@@ -3048,7 +3048,7 @@ export default function StaffRoom({
                         ✓ OPTION B: Download Local ZIP Archive
                       </div>
                       <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
-                        Download a backup archive containing all <code>/uploads</code> images and commit them manually inside your repository's <code>uploads/</code> directory!
+                        Download a backup archive containing all <code>/public/uploads</code> images and commit them manually inside your repository's <code>public/uploads/</code> directory!
                       </p>
                       <button
                         onClick={() => {

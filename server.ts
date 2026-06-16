@@ -311,6 +311,29 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Migration helper: If files exist in the old /uploads folder at the root, move them to public/uploads
+const oldUploadsDir = path.join(myDirname, 'uploads');
+if (fs.existsSync(oldUploadsDir) && oldUploadsDir !== uploadsDir) {
+  try {
+    const files = fs.readdirSync(oldUploadsDir);
+    let migratedCount = 0;
+    files.forEach(file => {
+      const srcPath = path.join(oldUploadsDir, file);
+      const dstPath = path.join(uploadsDir, file);
+      if (fs.statSync(srcPath).isFile()) {
+        fs.copyFileSync(srcPath, dstPath);
+        fs.unlinkSync(srcPath);
+        migratedCount++;
+      }
+    });
+    if (migratedCount > 0) {
+      console.log(`Successfully migrated ${migratedCount} files from old /uploads to /public/uploads`);
+    }
+  } catch (err: any) {
+    console.error("Migration of /uploads failed: ", err);
+  }
+}
+
 // Serve uploaded images statically
 app.use('/uploads', express.static(uploadsDir));
 
