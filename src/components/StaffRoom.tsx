@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import JSZip from 'jszip';
 import { 
   Lock, Unlock, Settings, ShoppingBag, Edit, ShieldAlert, Cpu, HeartHandshake, 
   Eye, Plus, Check, FileSpreadsheet, RefreshCw, Trash2, Search, Upload, 
@@ -120,6 +121,8 @@ export default function StaffRoom({
   const [imgUploading, setImgUploading] = useState<boolean>(false);
   const [uploadedPhotosCount, setUploadedPhotosCount] = useState<number>(0);
   const [dragOverZone, setDragOverZone] = useState<'photos' | 'catalog' | 'mapping' | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState('');
 
   const handleUploadedPhotos = async (files: FileList) => {
     setImgUploading(true);
@@ -472,6 +475,118 @@ export default function StaffRoom({
 
   // Manager reject notes
   const [gmRejectNotes, setGmRejectNotes] = useState<{ [id: string]: string }>({});
+
+  const startDynamicClientZipDownload = async () => {
+    setIsZipping(true);
+    setZipProgress('Initializing ZIP encoder...');
+    try {
+      const zip = new JSZip();
+      let processed = 0;
+      const total = galleryPhotos.length;
+
+      if (!total) {
+        alert("No photos in gallery to download.");
+        setIsZipping(false);
+        return;
+      }
+
+      // Deduplicate files by filename to avoid collisions/errors inside the ZIP
+      const addedFilenames = new Set<string>();
+
+      for (const photo of galleryPhotos) {
+        processed++;
+        setZipProgress(`Packing: ${processed}/${total}`);
+
+        // Resolve filename
+        let filename = '';
+        if (photo.url && typeof photo.url === 'string' && photo.url.includes('/uploads/')) {
+          filename = photo.url.split('/uploads/').pop() || '';
+          // Clean query params if any
+          filename = filename.split('?')[0];
+        }
+
+        if (!filename) {
+          filename = `${photo.productCode || 'photo'}_${photo.id || Math.random().toString(36).substr(2, 5)}.jpg`;
+        }
+
+        // Make sure filename is completely clean and doesn't collide
+        if (addedFilenames.has(filename)) {
+          const extIdx = filename.lastIndexOf('.');
+          if (extIdx !== -1) {
+            filename = `${filename.substring(0, extIdx)}_${photo.id}${filename.substring(extIdx)}`;
+          } else {
+            filename = `${filename}_${photo.id}`;
+          }
+        }
+        addedFilenames.add(filename);
+
+        // Fetch image content (either from base64 fallback or of direct static endpoint)
+        let fileData: any = null;
+
+        // Try getting compressed fallbackUrl base64 first as it contains the real local image content from firebase
+        const base64Src = photo.fallbackUrl || (photo.url?.startsWith('data:') ? photo.url : null);
+        if (base64Src) {
+          try {
+            const base64Parts = base64Src.split(';base64,');
+            if (base64Parts.length === 2) {
+              const base64Data = base64Parts[1];
+              fileData = base64Data; // JSZip natively supports base64 input if we pass option {base64: true}
+            }
+          } catch (err) {
+            console.warn(`Failed parsing fallback base64 for ${filename}`, err);
+          }
+        }
+
+        // If no base64, or if it has a real static URL served locally (e.g. /uploads/...), fetch it!
+        if (!fileData && photo.url && typeof photo.url === 'string' && !photo.url.startsWith('data:')) {
+          try {
+            // Determine full or relative request path
+            const fetchUrl = photo.url.startsWith('http') ? photo.url : `${window.location.origin}${photo.url.startsWith('/') ? '' : '/'}${photo.url}`;
+            const res = await fetch(fetchUrl);
+            if (res.ok) {
+              const blob = await res.blob();
+              fileData = blob;
+            }
+          } catch (err) {
+            console.warn(`Could not fetch static asset for ${filename} at ${photo.url}: `, err);
+          }
+        }
+
+        // If file data is available, load it into zip
+        if (fileData) {
+          if (typeof fileData === 'string') {
+            zip.file(filename, fileData, { base64: true });
+          } else {
+            zip.file(filename, fileData);
+          }
+        } else {
+          console.warn(`Skipped downloading file ${filename} due to lack of image content source.`);
+        }
+      }
+
+      setZipProgress('Compiling final ZIP binary...');
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      setZipProgress('Downloading archive...');
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = 'hitech_uploads.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setZipProgress('Completed!');
+      alert(`🎉 Download complete! A backup of all ${total} gallery photos has been created and downloaded.`);
+    } catch (err: any) {
+      console.error("Client side ZIP build failed: ", err);
+      alert(`⚠️ Client ZIP generation encountered an error: ${err.message || err}. Falling back to standard API...`);
+      // Final fallback to the original API URL
+      window.open('/api/download-uploads', '_blank');
+    } finally {
+      setIsZipping(false);
+      setZipProgress('');
+    }
+  };
 
   const handleLogin = () => {
     if (pin === '54321') {
@@ -3051,12 +3166,22 @@ export default function StaffRoom({
                         Download a backup archive containing all <code>/public/uploads</code> images and commit them manually inside your repository's <code>public/uploads/</code> directory!
                       </p>
                       <button
-                        onClick={() => {
-                          window.open('/api/download-uploads', '_blank');
-                        }}
-                        className="mt-2 w-full py-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-[#0a0a0a] text-[9px] font-mono font-black uppercase rounded-md transition"
+                        onClick={startDynamicClientZipDownload}
+                        disabled={isZipping}
+                        className={`mt-2 w-full py-1.5 active:scale-95 text-[#0a0a0a] text-[9px] font-mono font-black uppercase rounded-md transition flex items-center justify-center gap-1.5 ${
+                          isZipping 
+                            ? 'bg-emerald-800/80 text-emerald-300 cursor-not-allowed border border-emerald-600/30' 
+                            : 'bg-emerald-500 hover:bg-emerald-600'
+                        }`}
                       >
-                        Download Uploads Archive (.zip)
+                        {isZipping ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            {zipProgress || 'Encoding...'}
+                          </>
+                        ) : (
+                          'Download Uploads Archive (.zip)'
+                        )}
                       </button>
                     </div>
                   </div>
