@@ -24,6 +24,7 @@ import {
 import { User } from 'firebase/auth';
 import { parsePdfFile, runPdfAutoMatcher } from '../lib/pdfParserService';
 import { compressImage } from '../lib/imageCompressor';
+import { uploadImageToCDNOrLocal } from '../lib/cloudinaryService';
 
 // WhatsApp Utility with special formatting for Nigerian phone numbers (+234)
 const getWhatsAppUrl = (phone: string, text: string) => {
@@ -71,6 +72,8 @@ interface StaffRoomProps {
   onUpdateLiveEmbedUrl: (url: string) => void;
   galleryPhotos: any[];
   onUpdateGalleryPhotos: (photos: any[]) => void;
+  cloudinaryConfig?: { cloudName: string; uploadPreset: string };
+  onUpdateCloudinaryConfig?: (config: { cloudName: string; uploadPreset: string }) => void;
 }
 
 export default function StaffRoom({
@@ -104,13 +107,27 @@ export default function StaffRoom({
   liveEmbedUrl,
   onUpdateLiveEmbedUrl,
   galleryPhotos = [],
-  onUpdateGalleryPhotos
+  onUpdateGalleryPhotos,
+  cloudinaryConfig = { cloudName: '', uploadPreset: '' },
+  onUpdateCloudinaryConfig
 }: StaffRoomProps) {
   const [pin, setPin] = useState('');
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<'manager' | 'staff'>('staff');
+  const [loggedIn, setLoggedIn] = useState(() => {
+    try {
+      return localStorage.getItem('ht_staff_login') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [userRole, setUserRole] = useState<'manager' | 'staff'>(() => {
+    try {
+      return (localStorage.getItem('ht_staff_role') as any) || 'staff';
+    } catch {
+      return 'staff';
+    }
+  });
   const [errorMsg, setErrorMsg] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('inventory');
+  const [activeTab, setActiveTab] = useState<string>('repairs');
 
   // PDF Automation states
   const [extractedProducts, setExtractedProducts] = useState<any[]>([]);
@@ -144,17 +161,11 @@ export default function StaffRoom({
             // Compress image client-side to make it lightweight
             const compressedBase64 = await compressImage(rawDataUrl);
 
-            const uploadRes = await fetch('/api/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: file.name, base64Data: compressedBase64 })
-            });
-            if (!uploadRes.ok) throw new Error("Upload failed");
-            const uploadData = await uploadRes.json();
+            const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
             
             const newPhoto = {
               id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-              url: uploadData.url,
+              url: finalUrl,
               fallbackUrl: compressedBase64,
               label: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
               sub: '',
@@ -476,6 +487,18 @@ export default function StaffRoom({
   // Manager reject notes
   const [gmRejectNotes, setGmRejectNotes] = useState<{ [id: string]: string }>({});
 
+  // Cloudinary settings local states
+  const [cloudNameInput, setCloudNameInput] = useState(cloudinaryConfig?.cloudName || '');
+  const [uploadPresetInput, setUploadPresetInput] = useState(cloudinaryConfig?.uploadPreset || '');
+  const [isCloudinarySaving, setIsCloudinarySaving] = useState(false);
+
+  useEffect(() => {
+    if (cloudinaryConfig) {
+      setCloudNameInput(cloudinaryConfig.cloudName || '');
+      setUploadPresetInput(cloudinaryConfig.uploadPreset || '');
+    }
+  }, [cloudinaryConfig]);
+
   const startDynamicClientZipDownload = async () => {
     setIsZipping(true);
     setZipProgress('Initializing ZIP encoder...');
@@ -592,11 +615,23 @@ export default function StaffRoom({
     if (pin === '54321') {
       setUserRole('manager');
       setLoggedIn(true);
+      try {
+        localStorage.setItem('ht_staff_login', 'true');
+        localStorage.setItem('ht_staff_role', 'manager');
+      } catch (e) {
+        console.warn(e);
+      }
       setErrorMsg('');
       setActiveTab('inventory');
     } else if (pin === '12345') {
       setUserRole('staff');
       setLoggedIn(true);
+      try {
+        localStorage.setItem('ht_staff_login', 'true');
+        localStorage.setItem('ht_staff_role', 'staff');
+      } catch (e) {
+        console.warn(e);
+      }
       setErrorMsg('');
       setActiveTab('inventory');
     } else {
@@ -640,14 +675,8 @@ export default function StaffRoom({
     reader.onloadend = async () => {
       const dataUrl = reader.result as string;
       try {
-        const uploadRes = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, base64Data: dataUrl })
-        });
-        if (!uploadRes.ok) throw new Error("Upload failed");
-        const uploadData = await uploadRes.json();
-        setNewImageUrl(uploadData.url);
+        const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+        setNewImageUrl(finalUrl);
       } catch (err) {
         console.error("Staff room photo saving fell back to local memory base64:", err);
         setNewImageUrl(dataUrl);
@@ -979,6 +1008,30 @@ export default function StaffRoom({
               </button>
             )}
             <p className="text-[10px] text-zinc-500">Signs you in safely to sync the Firestore cloud directly.</p>
+
+            {/* Display authentication errors directly on the entrance gateway */}
+            {statusError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-[11px] text-left mt-2 space-y-1">
+                <span className="font-bold flex items-center gap-1 font-mono text-xs text-red-300">⚠ Login Error / Popup Mismatch</span>
+                <p className="leading-relaxed text-[10px]">{statusError}</p>
+              </div>
+            )}
+
+            {/* If embedded in an iframe preview, suggest opening in a new tab proactively */}
+            {window.self !== window.top && (
+              <div className="mt-2 p-3 bg-amber-500/5 rounded-lg border border-amber-500/15 text-left space-y-2">
+                <p className="text-[10px] text-amber-400/90 leading-relaxed font-sans">
+                  💡 <strong>IFrame sandbox detected.</strong> Standard browser security blocks Google authentication popups inside iframe wrappers.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[9px] uppercase font-bold text-center border border-amber-500/20 shadow-sm transition-all font-sans"
+                >
+                  🚀 Open App in New Tab to Sign In
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Separator block */}
@@ -1045,6 +1098,12 @@ export default function StaffRoom({
               onClick={() => {
                 setLoggedIn(false);
                 setPin('');
+                try {
+                  localStorage.removeItem('ht_staff_login');
+                  localStorage.removeItem('ht_staff_role');
+                } catch (e) {
+                  console.warn(e);
+                }
               }}
               className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded hover:bg-zinc-850 text-[10px] items-center gap-1 inline-flex font-bold uppercase transition"
             >
@@ -1176,13 +1235,10 @@ export default function StaffRoom({
       <div className="flex border-b border-[#262626] text-xs uppercase overflow-x-auto gap-2 py-1 scrollbar-thin">
         {(userRole === 'manager'
           ? [
-              { id: 'inventory', label: 'Inventory list' },
               { id: 'repairs', label: 'Repairs' },
               { id: 'gmq', label: 'GM Queue' },
               { id: 'deals', label: 'Flash Deals' },
-              { id: 'pdf-mapping', label: 'PDF Automation 🤖' },
               { id: 'bank', label: 'Bank details' },
-              { id: 'sheets', label: 'Spreadsheets Sync' },
               { id: 'shortvideos', label: 'Short clips' },
               { id: 'livestreams', label: 'Live streaming link' },
               { id: 'collage', label: 'Collage Builder' },
@@ -1190,10 +1246,7 @@ export default function StaffRoom({
               { id: 'approvals', label: `Pending Approvals (${requests.filter(r => r.status === 'pending').length})` }
             ]
           : [
-              { id: 'inventory', label: 'Inventory (Direct Uploads)' },
               { id: 'repairs', label: 'Repairs desk' },
-              { id: 'pdf-mapping', label: 'PDF Automation 🤖' },
-              { id: 'sheets', label: 'Spreadsheets sync' },
               { id: 'shortvideos', label: 'Tech clips' },
               { id: 'collage', label: 'Collage builder' },
               { id: 'proposals', label: `My Proposals (${requests.length})` }
@@ -1213,7 +1266,7 @@ export default function StaffRoom({
       </div>
 
       {/* TAB CONTENT: INVENTORY & PRICES */}
-      {activeTab === 'inventory' && (
+      {false && activeTab === 'inventory' && (
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 bg-[#141414] p-3 border border-[#262626] rounded-xl text-left">
             <div className="space-y-0.5">
@@ -2210,7 +2263,7 @@ export default function StaffRoom({
       )}
 
       {/* TAB CONTENT: GOOGLE SHEETS LIVE SYNC ENGINE */}
-      {activeTab === 'sheets' && (
+      {false && activeTab === 'sheets' && (
         <div className="space-y-4 font-sans">
           <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
             <div className="flex items-center gap-2 border-b border-[#262626] pb-3 justify-between">
@@ -2877,7 +2930,7 @@ export default function StaffRoom({
       )}
 
       {/* TAB CONTENT: PDF MAPPING & AUTOMATION */}
-      {activeTab === 'pdf-mapping' && (
+      {false && activeTab === 'pdf-mapping' && (
         <div className="space-y-4 text-left">
           <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
             <div className="flex items-center gap-2">
@@ -3145,10 +3198,10 @@ export default function StaffRoom({
                 
                 <div className="mt-2.5 p-2 bg-black/40 border border-zinc-900 rounded-lg space-y-2">
                   <div className="text-[9px] font-mono font-bold text-zinc-400 uppercase">
-                    Select your preferred alignment flow (Option A or Option B):
+                    Select your preferred alignment flow (Option A, B, or C):
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-left">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 text-left">
                     <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1">
                       <div className="text-[9px] font-mono font-black text-[#F5C518] uppercase">
                         ✓ OPTION A: Quick Github Export
@@ -3158,13 +3211,15 @@ export default function StaffRoom({
                       </p>
                     </div>
 
-                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1">
-                      <div className="text-[9px] font-mono font-black text-emerald-400 uppercase">
-                        ✓ OPTION B: Download Local ZIP Archive
+                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[9px] font-mono font-black text-emerald-400 uppercase">
+                          ✓ OPTION B: Download ZIP
+                        </div>
+                        <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
+                          Download a backup archive containing all <code>/public/uploads</code> images and commit them manually inside your repository's <code>public/uploads/</code> directory!
+                        </p>
                       </div>
-                      <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
-                        Download a backup archive containing all <code>/public/uploads</code> images and commit them manually inside your repository's <code>public/uploads/</code> directory!
-                      </p>
                       <button
                         onClick={startDynamicClientZipDownload}
                         disabled={isZipping}
@@ -3180,10 +3235,72 @@ export default function StaffRoom({
                             {zipProgress || 'Encoding...'}
                           </>
                         ) : (
-                          'Download Uploads Archive (.zip)'
+                          'Download (.zip)'
                         )}
                       </button>
                     </div>
+
+                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[9px] font-mono font-black text-cyan-400 uppercase">
+                          ⚡ OPTION C: Cloudinary CDN
+                        </div>
+                        <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
+                          Store newly uploaded product photos on your personal Cloudinary cloud directly. This bypasses Git pushes and prevents Netlify 404 images!
+                        </p>
+
+                        <div className="mt-2.5 space-y-1.5">
+                          <div>
+                            <span className="text-[7.5px] font-mono uppercase text-zinc-500 font-black tracking-wider block">Cloud Name</span>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. hitechdist" 
+                              value={cloudNameInput}
+                              onChange={(e) => setCloudNameInput(e.target.value)}
+                              className="w-full text-[9px] bg-zinc-950 border border-zinc-900 px-2 py-1 text-zinc-300 rounded font-mono focus:border-cyan-500/50 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[7.5px] font-mono uppercase text-zinc-500 font-black tracking-wider block">Upload Preset</span>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. ml_default" 
+                              value={uploadPresetInput}
+                              onChange={(e) => setUploadPresetInput(e.target.value)}
+                              className="w-full text-[9px] bg-zinc-950 border border-zinc-900 px-2 py-1 text-[#f5c518] rounded font-mono focus:border-cyan-500/50 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          if (!cloudNameInput.trim() || !uploadPresetInput.trim()) {
+                            alert("Please fill out both Cloud Name and Upload Preset to connect Cloudinary!");
+                            return;
+                          }
+                          setIsCloudinarySaving(true);
+                          try {
+                            if (onUpdateCloudinaryConfig) {
+                              await onUpdateCloudinaryConfig({
+                                cloudName: cloudNameInput.trim(),
+                                uploadPreset: uploadPresetInput.trim()
+                              });
+                              alert("⚡ Cloudinary Cloud CDN linked successfully and synchronized dynamically in Firestore!");
+                            }
+                          } catch (err) {
+                            alert("Failed to save Cloudinary configuration. Please verify credentials.");
+                          } finally {
+                            setIsCloudinarySaving(false);
+                          }
+                        }}
+                        disabled={isCloudinarySaving}
+                        className="mt-2.5 w-full py-1.5 active:scale-95 text-[#0a0a0a] text-[9px] font-mono font-black uppercase rounded-md transition bg-cyan-400 hover:bg-cyan-500"
+                      >
+                        {isCloudinarySaving ? 'Linking...' : (cloudinaryConfig?.cloudName ? 'Update CDN' : 'Link CDN')}
+                      </button>
+                    </div>
+
                   </div>
                 </div>
               </div>
@@ -3240,6 +3357,14 @@ export default function StaffRoom({
                           alt="preview"
                           className="w-12 h-12 object-cover rounded-lg border border-[#262626]"
                           onError={(e) => {
+                            console.error(`🚨 [Image Load Failure] Staffroom diff list preview image failed to load!`, {
+                              url: diff.url,
+                              label: diff.label,
+                              host: window.location.host
+                            });
+                            if (diff.url?.startsWith('/uploads/')) {
+                              console.warn(`💡 [Diagnostic Tip] Relative URL "/uploads/..." failed to load on Netlify. Recommend configuring Option C (Cloudinary Auto-Hosting) inside Staff Operations to auto-host images dynamically and prevent 404s!`);
+                            }
                             e.currentTarget.onerror = null;
                             if (diff.fallbackUrl && e.currentTarget.src !== diff.fallbackUrl) {
                               e.currentTarget.src = diff.fallbackUrl;

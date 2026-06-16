@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingCart, MessageSquare, Image, Cpu, Check } from 'lucide-react';
+import { X, ShoppingCart, MessageSquare, Image, Cpu, Check, Upload } from 'lucide-react';
 import { Product, SolarProduct } from '../types';
+import { compressImage } from '../lib/imageCompressor';
+import { uploadImageToCDNOrLocal } from '../lib/cloudinaryService';
 
 interface ProductDetailOverlayProps {
   product: Product | SolarProduct | null;
@@ -15,6 +17,10 @@ interface ProductDetailOverlayProps {
   imageCache: { [key: string]: string };
   onUpdateImageCache: (key: string, url: string) => void;
   onTriggerEnquiry: (msg: string) => void;
+  isStaffLoggedIn?: boolean;
+  onEdit?: (product: Product | SolarProduct) => void;
+  onChangePhoto?: (product: Product | SolarProduct, imageUrl: string) => void;
+  cloudinaryConfig?: { cloudName: string; uploadPreset: string };
 }
 
 export function getDefaultProductImage(product: Product | SolarProduct): string {
@@ -76,9 +82,14 @@ export default function ProductDetailOverlay({
   onAddSolarToCart,
   imageCache,
   onUpdateImageCache,
-  onTriggerEnquiry
+  onTriggerEnquiry,
+  isStaffLoggedIn = false,
+  onEdit,
+  onChangePhoto,
+  cloudinaryConfig
 }: ProductDetailOverlayProps) {
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (!product) {
@@ -119,9 +130,19 @@ export default function ProductDetailOverlay({
 
         {/* Product Brand Header / Tags */}
         <div className="space-y-1 mb-3">
-          <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
-            {isSolar ? 'Solar Setup Portfolio' : (product as Product).cat}
-          </span>
+          <div className="flex justify-between items-center pr-8">
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
+              {isSolar ? 'Solar Setup Portfolio' : (product as Product).cat}
+            </span>
+            {isStaffLoggedIn && onEdit && (
+              <button
+                onClick={() => onEdit(product)}
+                className="text-[9px] font-sans font-extrabold uppercase bg-amber-550/10 text-amber-400 hover:bg-amber-500/25 px-2.5 py-1 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
+              >
+                ✏️ Edit Specs
+              </button>
+            )}
+          </div>
           <h2 className="text-lg font-bold text-[#f5f5f5] leading-tight pr-8">{product.n}</h2>
           {(!isSolar && (product as Product).pn && (product as Product).pn !== '—') && (
             <p className="text-[10px] text-zinc-400 font-mono">P/N: {(product as Product).pn}</p>
@@ -129,13 +150,22 @@ export default function ProductDetailOverlay({
         </div>
 
         {/* Product Image Section */}
-        <div className="relative aspect-video rounded-xl overflow-hidden bg-[#0a0a0a] border border-[#262626] flex items-center justify-center mb-4 text-xs text-zinc-500">
+        <div className="relative aspect-video rounded-xl overflow-hidden bg-[#0a0a0a] border border-[#262626] flex items-center justify-center mb-4 text-xs text-zinc-500 group">
           {localImageUrl ? (
             <img 
               src={localImageUrl} 
               alt={product.n} 
               className="w-full h-full object-cover"
               onError={(e) => {
+                console.error(`🚨 [Image Load Failure] Product detail overlay image failed to load!`, {
+                  url: localImageUrl,
+                  id: product.id,
+                  name: product.n,
+                  host: window.location.host
+                });
+                if (localImageUrl.startsWith('/uploads/')) {
+                  console.warn(`💡 [Diagnostic Tip] Relative URL "/uploads/..." failed to load on Netlify. Dynamically uploaded photos are server-side and don't exist on Netlify (static deployment) without Option C (Cloudinary Auto-Hosting) configured.`);
+                }
                 e.currentTarget.onerror = null;
                 e.currentTarget.src = getDefaultProductImage(product);
               }}
@@ -145,6 +175,62 @@ export default function ProductDetailOverlay({
               <Image className="w-8 h-8 text-zinc-600 mx-auto" />
               <p className="text-zinc-500 text-[11px]">No product photo cached</p>
             </div>
+          )}
+
+          {/* Upload spinner layer */}
+          {isUploading && (
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20">
+              <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-widest animate-pulse">Uploading...</span>
+            </div>
+          )}
+
+          {/* Direct photo upload trigger for logged-in staff */}
+          {isStaffLoggedIn && !isUploading && (
+            <label className="absolute bottom-2 right-2 bg-black/75 hover:bg-black text-[10px] text-amber-400 font-bold py-1.5 px-3 rounded-lg border border-zinc-800 cursor-pointer flex items-center gap-1.5 transition-all z-10 hover:border-amber-500/50 shadow-lg">
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Photo</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    setIsUploading(true);
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      try {
+                        const dataUrl = reader.result as string;
+                        // Compress photo
+                        const compressed = await compressImage(dataUrl);
+                        // Save to server/CDN
+                        const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                        
+                        // Fire callback to save matching doc to Firestore/Local list
+                        if (onChangePhoto) {
+                          await onChangePhoto(product, finalUrl);
+                        }
+                        
+                        // Update cache in-applet
+                        onUpdateImageCache(product.id.toString(), finalUrl);
+                        setLocalImageUrl(finalUrl);
+                        alert("📷 Product showroom photo synced successfully!");
+                      } catch (innerErr: any) {
+                        alert("Upload failed: " + innerErr.message);
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  } catch (err: any) {
+                    alert("Failure initiating uploader: " + err.message);
+                    setIsUploading(false);
+                  }
+                }}
+              />
+            </label>
           )}
         </div>
 

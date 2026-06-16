@@ -8,7 +8,8 @@ import {
   LayoutGrid, Image, Sun, Radio, Wrench, Tag, ListCollapse, FileText, Bot, 
   Contact as ContactIcon, ShieldCheck, MapPin, Star, ShieldAlert, Cpu, Landmark,
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
-  Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search
+  Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
+  Edit, Pencil, Lock, Unlock, Check, X
 } from 'lucide-react';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState } from './types';
@@ -24,6 +25,7 @@ import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsS
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
+import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
 
 export default function App() {
   // Navigation: "landing" | "main-app"
@@ -39,9 +41,216 @@ export default function App() {
   const [cart, setCart] = useState<{ [productId: number]: number }>({});
   const [solarCart, setSolarCart] = useState<{ [solarId: string]: number }>({});
   
-  const [productsList, setProductsList] = useState<Product[]>(PRODS);
-  const [solarProductsList, setSolarProductsList] = useState<SolarProduct[]>(SOLAR);
+  const [productsList, setProductsList] = useState<Product[]>(() => {
+    try {
+      const stored = localStorage.getItem('ht_products');
+      return stored ? JSON.parse(stored) : PRODS;
+    } catch {
+      return PRODS;
+    }
+  });
+  const [solarProductsList, setSolarProductsList] = useState<SolarProduct[]>(() => {
+    try {
+      const stored = localStorage.getItem('ht_solar_products');
+      return stored ? JSON.parse(stored) : SOLAR;
+    } catch {
+      return SOLAR;
+    }
+  });
   const [dealsList, setDealsList] = useState<Deal[]>(DEFAULT_DEALS);
+
+  // Database handlers for product management
+  const handleSaveProduct = async (prod: Product) => {
+    let nextList;
+    if (productsList.some(p => p.id === prod.id)) {
+      nextList = productsList.map(p => p.id === prod.id ? prod : p);
+    } else {
+      nextList = [...productsList, prod];
+    }
+    setProductsList(nextList);
+
+    // Sync updates to corresponding gallery photos
+    const nextPhotos = galleryPhotos.map(photo => {
+      if (photo.productCode === prod.pn) {
+        return {
+          ...photo,
+          label: prod.n,
+          sub: prod.sp,
+          price: prod.price
+        };
+      }
+      return photo;
+    });
+    if (JSON.stringify(nextPhotos) !== JSON.stringify(galleryPhotos)) {
+      saveGalleryPhotosToStorage(nextPhotos);
+    }
+
+    try {
+      localStorage.setItem('ht_products', JSON.stringify(nextList));
+      await setDoc(doc(db, 'products', String(prod.id)), prod);
+    } catch (e) {
+      console.warn("Error saving product to Cloud Firestore: ", e);
+    }
+  };
+
+  const handleDeleteProduct = async (id: number) => {
+    const nextList = productsList.filter(p => p.id !== id);
+    setProductsList(nextList);
+    try {
+      localStorage.setItem('ht_products', JSON.stringify(nextList));
+      await deleteDoc(doc(db, 'products', String(id)));
+    } catch (e) {
+      console.warn("Error deleting product from Cloud Firestore: ", e);
+    }
+  };
+
+  const handleSaveSolarProduct = async (solar: SolarProduct) => {
+    let nextList;
+    if (solarProductsList.some(s => s.id === solar.id)) {
+      nextList = solarProductsList.map(s => s.id === solar.id ? solar : s);
+    } else {
+      nextList = [...solarProductsList, solar];
+    }
+    setSolarProductsList(nextList);
+
+    // Sync updates to corresponding gallery photos
+    const nextPhotos = galleryPhotos.map(photo => {
+      if (photo.productCode === solar.id) {
+        return {
+          ...photo,
+          label: solar.n,
+          sub: solar.sp,
+          price: solar.price
+        };
+      }
+      return photo;
+    });
+    if (JSON.stringify(nextPhotos) !== JSON.stringify(galleryPhotos)) {
+      saveGalleryPhotosToStorage(nextPhotos);
+    }
+
+    try {
+      localStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      await setDoc(doc(db, 'solar_products', solar.id), solar);
+    } catch (e) {
+      console.warn("Error saving solar product to Cloud Firestore: ", e);
+    }
+  };
+
+  const handleDeleteSolarProduct = async (id: string) => {
+    const nextList = solarProductsList.filter(s => s.id !== id);
+    setSolarProductsList(nextList);
+    try {
+      localStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      await deleteDoc(doc(db, 'solar_products', id));
+    } catch (e) {
+      console.warn("Error deleting solar product from Cloud Firestore: ", e);
+    }
+  };
+
+  // Staff Direct Mode states
+  const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(() => {
+    try {
+      return localStorage.getItem('ht_staff_login') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [staffRole, setStaffRole] = useState(() => {
+    try {
+      return localStorage.getItem('ht_staff_role') || 'staff';
+    } catch {
+      return 'staff';
+    }
+  });
+
+  // Direct modal/forms for inline action pipeline
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingSolar, setEditingSolar] = useState<SolarProduct | null>(null);
+  const [editingGallery, setEditingGallery] = useState<any | null>(null);
+  const [showCreateProductModal, setShowCreateProductModal] = useState<boolean>(false);
+  const [createProductCat, setCreateProductCat] = useState<string>('laptops');
+  const [showCreateGalleryModal, setShowCreateGalleryModal] = useState<boolean>(false);
+  const [showDirectLoginModal, setShowDirectLoginModal] = useState<boolean>(false);
+  const [directPinInput, setDirectPinInput] = useState<string>('');
+  const [directLoginError, setDirectLoginError] = useState<string>('');
+  const [directUploading, setDirectUploading] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const logged = localStorage.getItem('ht_staff_login') === 'true';
+        const r = localStorage.getItem('ht_staff_role') || 'staff';
+        if (logged !== isStaffLoggedIn) setIsStaffLoggedIn(logged);
+        if (r !== staffRole) setStaffRole(r);
+      } catch (e) {
+        // Safe fallback
+      }
+    };
+    const timer = setInterval(handleSync, 500);
+
+    // Sync products and solar products from Firestore realtime
+    let unsubP = () => {};
+    let unsubS = () => {};
+    try {
+      unsubP = onSnapshot(collection(db, 'products'), (snapshot) => {
+        const list: Product[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as Product);
+        });
+        if (list.length > 0) {
+          setProductsList(prev => {
+            const merged = [...prev];
+            list.forEach(item => {
+              const idx = merged.findIndex(p => p.id === item.id);
+              if (idx >= 0) {
+                merged[idx] = item;
+              } else {
+                merged.push(item);
+              }
+            });
+            localStorage.setItem('ht_products', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      }, (err) => {
+        console.warn("Products sync notice (operating locally): ", err);
+      });
+
+      unsubS = onSnapshot(collection(db, 'solar_products'), (snapshot) => {
+        const list: SolarProduct[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as SolarProduct);
+        });
+        if (list.length > 0) {
+          setSolarProductsList(prev => {
+            const merged = [...prev];
+            list.forEach(item => {
+              const idx = merged.findIndex(s => s.id === item.id);
+              if (idx >= 0) {
+                merged[idx] = item;
+              } else {
+                merged.push(item);
+              }
+            });
+            localStorage.setItem('ht_solar_products', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      }, (err) => {
+        console.warn("Solar products sync notice (operating locally): ", err);
+      });
+    } catch (e) {
+      console.warn("Snapshots setup failed: ", e);
+    }
+
+    return () => {
+      clearInterval(timer);
+      unsubP();
+      unsubS();
+    };
+  }, [isStaffLoggedIn, staffRole]);
+
   const [repairsList, setRepairsList] = useState<RepairRecord[]>([]);
   const [gmqList, setGmqList] = useState<GMRequest[]>([]);
   const [reviewsList, setReviewsList] = useState<Review[]>([]);
@@ -105,6 +314,17 @@ export default function App() {
     } catch {
       return [];
     }
+  });
+
+  const [cloudinaryConfig, setCloudinaryConfig] = useState<{ cloudName: string; uploadPreset: string }>(() => {
+    try {
+      const saved = localStorage.getItem('ht_cloudinary_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      cloudName: (import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME || '',
+      uploadPreset: (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
+    };
   });
 
   const [galleryVideos, setGalleryVideos] = useState<any[]>(() => {
@@ -238,8 +458,15 @@ export default function App() {
   // Gallery view dedicated state controls
   const [gallerySelectedCode, setGallerySelectedCode] = useState<string>('');
   const [gallerySearchQuery, setGallerySearchQuery] = useState<string>('');
+  const [galleryTab, setGalleryTab] = useState<'all' | 'showcase' | 'custom' | 'manage_products'>('all');
 
-  const [galleryTab, setGalleryTab] = useState<'all' | 'showcase' | 'custom'>('all');
+  // Staff direct product index managers
+  const [manageInventoryType, setManageInventoryType] = useState<'standard' | 'solar'>('standard');
+  const [productSearchTerm, setProductSearchTerm] = useState<string>('');
+  const [productCatFilter, setProductCatFilter] = useState<string>('All');
+  const [createProductType, setCreateProductType] = useState<'standard' | 'solar'>('standard');
+  const [newProductForm, setNewProductForm] = useState<Partial<Product>>({ pn: '', n: 'Unmade', cat: 'laptops', sp: '', price: 'CALL', desc: '' });
+  const [newSolarForm, setNewSolarForm] = useState<Partial<SolarProduct>>({ id: '', cat: 'Inverters', n: '', brand: '', sp: '', price: '₦', desc: '' });
 
   // Typewriter sequence
   useEffect(() => {
@@ -523,7 +750,23 @@ export default function App() {
           });
         }
 
-        items.sort((a, b) => b.id.localeCompare(a.id));
+        items.sort((a, b) => {
+          const aCustom = !!a.isCustom;
+          const bCustom = !!b.isCustom;
+          if (aCustom && !bCustom) return -1;
+          if (!aCustom && bCustom) return 1;
+          if (aCustom && bCustom) {
+            return b.id.localeCompare(a.id);
+          }
+          const aIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(a.id));
+          const bIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(b.id));
+          if (aIdx > -1 && bIdx > -1) {
+            return aIdx - bIdx;
+          }
+          if (aIdx > -1) return -1;
+          if (bIdx > -1) return 1;
+          return b.id.localeCompare(a.id);
+        });
         setGalleryPhotos(items);
         localStorage.setItem('ht_gallery_photos', JSON.stringify(items));
       }
@@ -599,6 +842,13 @@ export default function App() {
         } else if (id === 'contacts') {
           setContacts(data);
           localStorage.setItem('ht_contacts', JSON.stringify(data));
+        } else if (id === 'cloudinary') {
+          const configVal = {
+            cloudName: data.cloudName || '',
+            uploadPreset: data.uploadPreset || ''
+          };
+          setCloudinaryConfig(configVal);
+          localStorage.setItem('ht_cloudinary_config', JSON.stringify(configVal));
         }
       });
     }, (error) => {
@@ -809,6 +1059,16 @@ export default function App() {
       await setDoc(doc(db, 'app_config', 'contacts'), newContacts);
     } catch (err) {
       console.warn("Contacts configurations cloud update offline fallback: ", err);
+    }
+  };
+
+  const handleUpdateCloudinaryConfig = async (config: { cloudName: string; uploadPreset: string }) => {
+    setCloudinaryConfig(config);
+    localStorage.setItem('ht_cloudinary_config', JSON.stringify(config));
+    try {
+      await setDoc(doc(db, 'app_config', 'cloudinary'), config);
+    } catch (err) {
+      console.warn("Cloudinary configuration cloud update offline fallback: ", err);
     }
   };
 
@@ -1407,14 +1667,7 @@ Message: ${quickMessageText}`;
                     // Compress image client-side to make it lightweight
                     const compressedBase64 = await compressImage(dataUrl);
 
-                    const uploadRes = await fetch('/api/upload', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ filename: file.name, base64Data: compressedBase64 })
-                    });
-                    if (!uploadRes.ok) throw new Error("Upload failed");
-                    const uploadData = await uploadRes.json();
-                    const finalUrl = uploadData.url;
+                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
 
                     const newPhoto = {
                       id: 'gal_' + Date.now(),
@@ -1483,22 +1736,30 @@ Message: ${quickMessageText}`;
 
               return (
                 <div className="p-4 space-y-4">
-                  <div className="text-center">
+                  <div className="text-center relative">
                     <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Workspace Portfolios</h2>
                     <p className="text-md font-serif font-bold text-zinc-300">Authorized Distribution Exhibition</p>
+                    {isStaffLoggedIn && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-md font-mono text-[9px] font-bold uppercase tracking-wider">
+                        <ShieldCheck className="w-3 h-3 text-amber-500 animate-pulse" />
+                        Direct Control Active ({staffRole})
+                      </div>
+                    )}
                   </div>
 
                   {/* GALLERY GALLERY FEED SUB-TABS */}
-                  <div className="flex gap-1.5 text-[9px] uppercase font-bold border-b border-[#262626] pb-2 pt-2">
+                  <div className="flex gap-1.5 text-[9px] uppercase font-bold border-b border-[#262626] pb-2 pt-2 overflow-x-auto scrollbar-none">
                     {[
                       { id: 'all', label: 'All Photos' },
                       { id: 'showcase', label: 'Store Showcase' },
-                      { id: 'custom', label: 'Product Code Photos' }
+                      { id: 'custom', label: 'Product Code Photos' },
+                      ...(isStaffLoggedIn ? [{ id: 'manage_products', label: 'Manage Inventory' }] : [])
                     ].map(tab => (
                       <button
                         key={tab.id}
+                        type="button"
                         onClick={() => setGalleryTab(tab.id as any)}
-                        className={`pb-1 px-1 transition relative ${
+                        className={`pb-1 px-1 transition shrink-0 relative ${
                           galleryTab === tab.id 
                             ? 'text-[#F5C518] font-extrabold border-b-2 border-[#F5C518]' 
                             : 'text-zinc-500 hover:text-zinc-300'
@@ -1509,137 +1770,1175 @@ Message: ${quickMessageText}`;
                             ? galleryPhotos.filter(p => !p.isCustom).length 
                             : tab.id === 'custom' 
                               ? galleryPhotos.filter(p => p.isCustom).length 
-                              : galleryPhotos.length
+                              : tab.id === 'manage_products'
+                                ? (productsList.length + solarProductsList.length)
+                                : galleryPhotos.length
                         })
                       </button>
                     ))}
                   </div>
 
-                  {/* PHOTO FEED GRID */}
-                  <div className="grid grid-cols-1 gap-4">
-                    {filteredPhotos.length === 0 ? (
-                      <div className="text-center py-8 text-zinc-600 bg-[#141414] rounded-xl border border-dashed border-[#262626]">
-                        <p className="text-xs p-4">No product code photos mapped in this list yet. Select a product code above to register dynamic media showcases!</p>
+                  {galleryTab === 'manage_products' && isStaffLoggedIn ? (
+                    /* DIRECT INVENTORY MANAGEMENT TAB */
+                    <div className="space-y-4 text-left animate-fade-in">
+                      {/* TYPE SELECTOR TOGGLE */}
+                      <div className="flex bg-zinc-950 border border-zinc-900 rounded-lg p-1.5 gap-1 shadow-inner">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManageInventoryType('standard');
+                            setProductCatFilter('All');
+                          }}
+                          className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
+                            manageInventoryType === 'standard'
+                              ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+                          }`}
+                        >
+                          📦 Standard Systems
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManageInventoryType('solar');
+                            setProductCatFilter('All');
+                          }}
+                          className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
+                            manageInventoryType === 'solar'
+                              ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+                          }`}
+                        >
+                          ⚡ Solar Packages
+                        </button>
                       </div>
-                    ) : (
-                      filteredPhotos.map(img => {
-                        const isCustom = img.isCustom;
-                        // Find original product object so if the card is clicked, we can open details!
-                        const matchedProduct = allProductCodes.find(p => p.code === img.productCode)?.origin;
 
-                        const isCollageLayout = img.url?.startsWith('collage:');
-                        let collageLayoutType = 'dual';
-                        let collageLayoutImages: string[] = [];
-                        if (isCollageLayout) {
-                          const parts = img.url.split(':');
-                          collageLayoutType = parts[1] || 'dual';
-                          collageLayoutImages = (parts[2] || '').split(';');
-                        }
-
-                        return (
-                          <div 
-                            key={img.id} 
-                            className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-md relative group hover:border-zinc-700 transition"
+                      {/* QUICK CREATE BUTTON & FILTERS */}
+                      <div className="bg-[#141414] border border-[#212121] rounded-xl p-3 space-y-3">
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono tracking-wider">
+                            {manageInventoryType === 'standard' ? 'Standard Catalog' : 'Solar Catalog'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (manageInventoryType === 'standard') {
+                                setNewProductForm({
+                                  id: Date.now(),
+                                  pn: 'HT-' + String(Date.now()).slice(-4),
+                                  cat: 'laptops',
+                                  n: 'Unmade',
+                                  sp: 'System specification details pending customer confirmation',
+                                  price: 'CALL',
+                                  desc: 'Awaiting hardware specification sticker validation to populate model datasheet.'
+                                });
+                              } else {
+                                setNewSolarForm({
+                                  id: 'SOLAR-' + String(Date.now()).slice(-4),
+                                  cat: 'Inverters',
+                                  n: 'Unmade',
+                                  brand: 'Generic',
+                                  sp: 'Pure sine wave - specifications pending customer confirmation',
+                                  price: '₦',
+                                  desc: 'Awaiting model and capacity sticker details.'
+                                });
+                              }
+                              setCreateProductType(manageInventoryType);
+                              setShowCreateProductModal(true);
+                            }}
+                            className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-[#F5C518] text-[9px] font-mono font-bold px-2.5 py-1 rounded flex items-center gap-1 uppercase transition-colors"
                           >
-                            {isCollageLayout ? (
-                              <div className={`w-full aspect-video p-1.5 gap-1 bg-black/40 ${
-                                collageLayoutType === 'dual' ? 'grid grid-cols-2' :
-                                collageLayoutType === 'triple' ? 'grid grid-cols-3' :
-                                'grid grid-cols-2 grid-rows-2'
-                              }`}>
-                                {collageLayoutImages.map((collageUrl, indexU) => {
-                                  const isMainLeftFocus = collageLayoutType === 'triple' && indexU === 0;
-                                  return (
-                                    <div 
-                                      key={indexU} 
-                                      className={`rounded overflow-hidden border border-zinc-900/40 bg-zinc-950 flex relative ${
-                                        isMainLeftFocus ? 'col-span-2 row-span-2' : ''
-                                      }`}
-                                    >
-                                      <img 
-                                        src={collageUrl} 
-                                        alt="" 
-                                        className="w-full h-full object-cover filter brightness-[0.85]" 
-                                        loading="lazy" 
-                                        referrerPolicy="no-referrer" 
-                                        onError={(e) => {
-                                          e.currentTarget.onerror = null;
-                                          e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
-                                        }}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                            <Plus className="w-3.5 h-3.5" />
+                            Create Product Slot
+                          </button>
+                        </div>
+
+                        {/* SEARCH & FILTER GROUP */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-zinc-500" />
+                            <input
+                              type="text"
+                              placeholder="Search list..."
+                              value={productSearchTerm}
+                              onChange={e => setProductSearchTerm(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-1.5 pl-7 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
+                            />
+                          </div>
+
+                          <select
+                            value={productCatFilter}
+                            onChange={e => setProductCatFilter(e.target.value)}
+                            className="bg-zinc-950 border border-zinc-900 p-1.5 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
+                          >
+                            <option value="All">All Categories</option>
+                            {manageInventoryType === 'standard' ? (
+                              CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
                             ) : (
-                              <img 
-                                src={img.url} 
-                                alt={img.label} 
-                                className="w-full aspect-video object-cover filter brightness-[0.82]"
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  e.currentTarget.onerror = null; // Prevent infinite loop on failure
-                                  if (img.fallbackUrl && e.currentTarget.src !== img.fallbackUrl) {
-                                    e.currentTarget.src = img.fallbackUrl;
-                                  } else if (matchedProduct) {
-                                    e.currentTarget.src = getDefaultProductImage(matchedProduct);
-                                  } else {
-                                    e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
-                                  }
-                                }}
-                              />
+                              ['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
                             )}
+                          </select>
+                        </div>
+                      </div>
 
-                            {/* Trash Button for custom photos */}
-                            {isCustom && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteCustomPhoto(img.id, img.productCode);
-                                }}
-                                className="absolute top-2.5 right-2.5 p-1.5 bg-red-950/85 hover:bg-red-900 border border-red-800 text-red-200 rounded-lg transition-all scale-95 group-hover:scale-100 z-10"
-                                title="Remove illustration"
+                      {/* INVENTORY LISTS */}
+                      <div className="space-y-3">
+                        {manageInventoryType === 'standard' ? (
+                          (() => {
+                            const filteredList = productsList.filter(p => {
+                              const matchesSearch = p.n.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+                                p.pn.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                p.sp.toLowerCase().includes(productSearchTerm.toLowerCase());
+                              const matchesCat = productCatFilter === 'All' || p.cat === productCatFilter;
+                              return matchesSearch && matchesCat;
+                            });
+
+                            if (filteredList.length === 0) {
+                              return (
+                                <div className="text-center py-8 text-zinc-600 font-mono text-[10px]">
+                                  No products matched the active filters.
+                                </div>
+                              );
+                            }
+
+                            return filteredList.map(item => {
+                              const boundPhoto = galleryPhotos.find(p => p.productCode === item.pn);
+                              const isUnmade = item.n.toLowerCase() === 'unmade';
+
+                              return (
+                                <div key={item.id} className={`bg-[#121212] border border-[#212121] rounded-xl p-3 space-y-2 relative hover:border-zinc-700 transition-colors ${isUnmade ? 'shadow-lg border-amber-900/30' : ''}`}>
+                                  {isUnmade && (
+                                    <span className="absolute top-2 right-2 flex h-2 w-2">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                    </span>
+                                  )}
+
+                                  <div className="flex gap-2.5 items-start">
+                                    {/* PHOTO STATE / Direct Image Drag/Select Upload box */}
+                                    <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
+                                      {boundPhoto ? (
+                                        <>
+                                          <img src={boundPhoto.url} alt="" className="w-full h-full object-cover" />
+                                          <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                                            <input 
+                                              type="file" 
+                                              accept="image/*"
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onloadend = async () => {
+                                                  const dataUrl = reader.result as string;
+                                                  try {
+                                                    const compressedBase64 = await compressImage(dataUrl);
+                                                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                    const nextPhotos = galleryPhotos.map(p => {
+                                                      if (p.productCode === item.pn) {
+                                                        return { ...p, url: finalUrl, fallbackUrl: compressedBase64 };
+                                                      }
+                                                      return p;
+                                                    });
+                                                    saveGalleryPhotosToStorage(nextPhotos);
+                                                    handleUpdateImageCache(item.id.toString(), finalUrl);
+                                                    alert("📷 Image changed & successfully synced!");
+                                                  } catch {
+                                                    const compressedFallback = await compressImage(dataUrl);
+                                                    const nextPhotos = galleryPhotos.map(p => {
+                                                      if (p.productCode === item.pn) {
+                                                        return { ...p, url: compressedFallback, fallbackUrl: compressedFallback };
+                                                      }
+                                                      return p;
+                                                    });
+                                                    saveGalleryPhotosToStorage(nextPhotos);
+                                                    handleUpdateImageCache(item.id.toString(), compressedFallback);
+                                                    alert("📷 Image saved (local cache fallback)!");
+                                                  }
+                                                };
+                                                reader.readAsDataURL(file);
+                                              }}
+                                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            />
+                                            <Camera className="w-4 h-4 text-white" />
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className="text-center group p-0 relative w-full h-full flex flex-col items-center justify-center">
+                                          <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              const reader = new FileReader();
+                                              reader.onloadend = async () => {
+                                                const dataUrl = reader.result as string;
+                                                try {
+                                                  const compressedBase64 = await compressImage(dataUrl);
+                                                  const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                  const newPhoto = {
+                                                    id: 'gal_' + Date.now(),
+                                                    url: finalUrl,
+                                                    fallbackUrl: compressedBase64,
+                                                    label: item.n,
+                                                    sub: item.sp,
+                                                    productCode: item.pn,
+                                                    price: item.price,
+                                                    isCustom: true
+                                                  };
+                                                  saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
+                                                  handleUpdateImageCache(item.id.toString(), finalUrl);
+                                                  alert("📷 Image uploaded & bound successfully!");
+                                                } catch {
+                                                  const compressedFallback = await compressImage(dataUrl);
+                                                  const newPhoto = {
+                                                    id: 'gal_' + Date.now(),
+                                                    url: compressedFallback,
+                                                    fallbackUrl: compressedFallback,
+                                                    label: item.n,
+                                                    sub: item.sp,
+                                                    productCode: item.pn,
+                                                    price: item.price,
+                                                    isCustom: true
+                                                  };
+                                                  saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
+                                                  handleUpdateImageCache(item.id.toString(), compressedFallback);
+                                                  alert("📷 Image uploaded (local fallback db synched)!");
+                                                }
+                                              };
+                                              reader.readAsDataURL(file);
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                          />
+                                          <Plus className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-200 transition-colors" />
+                                          <span className="text-[6px] uppercase font-mono text-zinc-500 block mt-0.5">No Cover</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* INFO BLOCK */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex justify-between items-center gap-1.5">
+                                        <h4 className={`text-xs font-bold leading-tight truncate ${isUnmade ? 'text-amber-500 font-extrabold' : 'text-zinc-100'}`}>
+                                          {item.n}
+                                        </h4>
+                                        <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] border border-zinc-900 font-mono font-bold rounded shrink-0">
+                                          {item.pn}
+                                        </span>
+                                      </div>
+                                      
+                                      <p className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">
+                                        Category: {item.cat}
+                                      </p>
+                                      
+                                      <p className="text-[10px] text-zinc-400 font-mono leading-tight mt-1 line-clamp-1">
+                                        Specs: {item.sp}
+                                      </p>
+
+                                      {isUnmade && (
+                                        <div className="mt-1.5 flex items-center gap-1">
+                                          <span className="text-[8px] bg-amber-500/10 border border-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wide">
+                                            ⚠️ Unmade Specification Slot
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* FOOTER ACTIONS GROUP */}
+                                  <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
+                                    <span className="text-[10px] text-[#F5C518] font-bold font-mono">
+                                      Price Tag: {item.price}
+                                    </span>
+                                    
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingProduct(item);
+                                        }}
+                                        className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold px-2 py-1 rounded text-[9px] flex items-center gap-1 transition uppercase"
+                                      >
+                                        <Pencil className="w-3 h-3 text-zinc-400" />
+                                        Modify Setup
+                                      </button>
+                                      
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (window.confirm(`Are you sure you want to delete product "${item.n}" matching code ${item.pn}?`)) {
+                                            handleDeleteProduct(item.id);
+                                          }
+                                        }}
+                                        className="bg-red-950/40 hover:bg-red-950/80 border border-red-900/40 text-red-300 font-bold px-2 py-1 rounded text-[9px] flex items-center gap-1 transition uppercase"
+                                      >
+                                        <Trash2 className="w-3 h-3 text-red-400" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()
+                        ) : (
+                          (() => {
+                            const filteredList = solarProductsList.filter(s => {
+                              const matchesSearch = s.n.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+                                s.brand.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                s.id.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                s.sp.toLowerCase().includes(productSearchTerm.toLowerCase());
+                              const matchesCat = productCatFilter === 'All' || s.cat === productCatFilter;
+                              return matchesSearch && matchesCat;
+                            });
+
+                            if (filteredList.length === 0) {
+                              return (
+                                <div className="text-center py-8 text-zinc-600 font-mono text-[10px]">
+                                  No solar packages matched the active filters.
+                                </div>
+                              );
+                            }
+
+                            return filteredList.map(item => {
+                              const boundPhoto = galleryPhotos.find(p => p.productCode === item.id);
+                              const isUnmade = item.n.toLowerCase() === 'unmade';
+
+                              return (
+                                <div key={item.id} className="bg-[#121212] border border-[#212121] rounded-xl p-3 space-y-2 relative hover:border-zinc-700 transition" id={`solar-${item.id}`}>
+                                  <div className="flex gap-2.5 items-start">
+                                    {/* PHOTO STATE / Direct Image Drag/Select Upload box */}
+                                    <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
+                                      {boundPhoto ? (
+                                        <>
+                                          <img src={boundPhoto.url} alt="" className="w-full h-full object-cover" />
+                                          <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                                            <input 
+                                              type="file" 
+                                              accept="image/*"
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onloadend = async () => {
+                                                  const dataUrl = reader.result as string;
+                                                  try {
+                                                    const compressedBase64 = await compressImage(dataUrl);
+                                                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                    const nextPhotos = galleryPhotos.map(p => {
+                                                      if (p.productCode === item.id) {
+                                                        return { ...p, url: finalUrl, fallbackUrl: compressedBase64 };
+                                                      }
+                                                      return p;
+                                                    });
+                                                    saveGalleryPhotosToStorage(nextPhotos);
+                                                    handleUpdateImageCache(item.id, finalUrl);
+                                                    alert("📷 Image changed & successfully synced!");
+                                                  } catch {
+                                                    const compressedFallback = await compressImage(dataUrl);
+                                                    const nextPhotos = galleryPhotos.map(p => {
+                                                      if (p.productCode === item.id) {
+                                                        return { ...p, url: compressedFallback, fallbackUrl: compressedFallback };
+                                                      }
+                                                      return p;
+                                                    });
+                                                    saveGalleryPhotosToStorage(nextPhotos);
+                                                    handleUpdateImageCache(item.id, compressedFallback);
+                                                    alert("📷 Image saved (local cache fallback)!");
+                                                  }
+                                                };
+                                                reader.readAsDataURL(file);
+                                              }}
+                                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            />
+                                            <Camera className="w-4 h-4 text-white" />
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className="text-center group p-0 relative w-full h-full flex flex-col items-center justify-center">
+                                          <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              const reader = new FileReader();
+                                              reader.onloadend = async () => {
+                                                const dataUrl = reader.result as string;
+                                                try {
+                                                  const compressedBase64 = await compressImage(dataUrl);
+                                                  const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                  const newPhoto = {
+                                                    id: 'gal_' + Date.now(),
+                                                    url: finalUrl,
+                                                    fallbackUrl: compressedBase64,
+                                                    label: item.n,
+                                                    sub: item.sp,
+                                                    productCode: item.id,
+                                                    price: item.price,
+                                                    isCustom: true
+                                                  };
+                                                  saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
+                                                  handleUpdateImageCache(item.id, finalUrl);
+                                                  alert("📷 Image uploaded & bound successfully!");
+                                                } catch {
+                                                  const compressedFallback = await compressImage(dataUrl);
+                                                  const newPhoto = {
+                                                    id: 'gal_' + Date.now(),
+                                                    url: compressedFallback,
+                                                    fallbackUrl: compressedFallback,
+                                                    label: item.n,
+                                                    sub: item.sp,
+                                                    productCode: item.id,
+                                                    price: item.price,
+                                                    isCustom: true
+                                                  };
+                                                  saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
+                                                  handleUpdateImageCache(item.id, compressedFallback);
+                                                  alert("📷 Image uploaded (local fallback db synched)!");
+                                                }
+                                              };
+                                              reader.readAsDataURL(file);
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                          />
+                                          <Plus className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-200" />
+                                          <span className="text-[6px] uppercase font-mono text-zinc-500 block mt-0.5">No Cover</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* INFO BLOCK */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex justify-between items-center gap-1.5">
+                                        <h4 className="text-xs font-bold text-zinc-100 leading-tight truncate">
+                                          {item.n}
+                                        </h4>
+                                        <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] border border-zinc-900 font-mono font-bold rounded shrink-0 uppercase">
+                                          {item.brand} ({item.id})
+                                        </span>
+                                      </div>
+                                      <p className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">
+                                        Category: {item.cat}
+                                      </p>
+                                      
+                                      <p className="text-[10px] text-zinc-400 font-mono leading-tight mt-1 line-clamp-1">
+                                        Specs: {item.sp}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* FOOTER ACTIONS GROUP */}
+                                  <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
+                                    <span className="text-[10px] text-[#F5C518] font-bold font-mono">
+                                      Price Tag: {item.price}
+                                    </span>
+                                    
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingSolar(item);
+                                        }}
+                                        className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold px-2 py-1 rounded text-[9px] flex items-center gap-1 transition uppercase"
+                                      >
+                                        <Pencil className="w-3 h-3 text-zinc-400" />
+                                        Modify Setup
+                                      </button>
+                                      
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (window.confirm(`Are you sure you want to delete solar product "${item.n}"?`)) {
+                                            handleDeleteSolarProduct(item.id);
+                                          }
+                                        }}
+                                        className="bg-red-950/40 hover:bg-red-950/80 border border-red-900/40 text-red-300 font-bold px-2 py-1 rounded text-[9px] flex items-center gap-1 transition uppercase"
+                                      >
+                                        <Trash2 className="w-3 h-3 text-red-400" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* REGULAR PHOTOS COLLAGE GRID VIEW */
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        {filteredPhotos.length === 0 ? (
+                          <div className="text-center py-8 text-zinc-600 bg-[#141414] rounded-xl border border-dashed border-[#262626]">
+                            <p className="text-xs p-4">No product code photos mapped in this list yet. Select a product code above to register dynamic media showcases!</p>
+                          </div>
+                        ) : (
+                          filteredPhotos.map(img => {
+                            const isCustom = img.isCustom;
+                            const matchedProduct = allProductCodes.find(p => p.code === img.productCode)?.origin;
+
+                            const isCollageLayout = img.url?.startsWith('collage:');
+                            let collageLayoutType = 'dual';
+                            let collageLayoutImages: string[] = [];
+                            if (isCollageLayout) {
+                              const parts = img.url.split(':');
+                              collageLayoutType = parts[1] || 'dual';
+                              collageLayoutImages = (parts[2] || '').split(';');
+                            }
+
+                            return (
+                              <div 
+                                key={img.id} 
+                                className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-md relative group hover:border-zinc-700 transition"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-red-100" />
-                              </button>
-                            )}
-
-                            {/* Info Section */}
-                            <div className="p-3 text-left space-y-1">
-                              <div className="flex justify-between items-start gap-2">
-                                <h4 className="text-xs font-bold text-zinc-100 line-clamp-1">{img.label}</h4>
-                                {img.productCode && (
-                                  <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] font-mono font-bold rounded border border-zinc-800 shrink-0 uppercase">
-                                    {img.productCode}
-                                  </span>
+                                {isCollageLayout ? (
+                                  <div className={`w-full aspect-video p-1.5 gap-1 bg-black/40 ${
+                                    collageLayoutType === 'dual' ? 'grid grid-cols-2' :
+                                    collageLayoutType === 'triple' ? 'grid grid-cols-3' :
+                                    'grid grid-cols-2 grid-rows-2'
+                                  }`}>
+                                    {collageLayoutImages.map((collageUrl, indexU) => {
+                                      const isMainLeftFocus = collageLayoutType === 'triple' && indexU === 0;
+                                      return (
+                                        <div 
+                                          key={indexU} 
+                                          className={`rounded overflow-hidden border border-zinc-900/40 bg-zinc-950 flex relative ${
+                                            isMainLeftFocus ? 'col-span-2 row-span-2' : ''
+                                          }`}
+                                        >
+                                          <img 
+                                            src={collageUrl} 
+                                            alt="" 
+                                            className="w-full h-full object-cover filter brightness-[0.85]" 
+                                            loading="lazy" 
+                                            referrerPolicy="no-referrer" 
+                                            onError={(e) => {
+                                              console.error(`🚨 [Image Load Failure] Collage grid image failed to load!`, {
+                                                url: collageUrl,
+                                                containerOwnerId: img.id,
+                                                containerOwnerLabel: img.label,
+                                                host: window.location.host
+                                              });
+                                              e.currentTarget.onerror = null;
+                                              e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
+                                            }}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <img 
+                                    src={img.url} 
+                                    alt={img.label} 
+                                    className="w-full aspect-video object-cover filter brightness-[0.82]"
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      console.error(`🚨 [Image Load Failure] Portfolio gallery image failed to load!`, {
+                                        url: img.url,
+                                        photoId: img.id,
+                                        photoLabel: img.label,
+                                        productCode: img.productCode,
+                                        host: window.location.host
+                                      });
+                                      e.currentTarget.onerror = null;
+                                      if (img.fallbackUrl && e.currentTarget.src !== img.fallbackUrl) {
+                                        e.currentTarget.src = img.fallbackUrl;
+                                      } else if (matchedProduct) {
+                                        e.currentTarget.src = getDefaultProductImage(matchedProduct);
+                                      } else {
+                                        e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
+                                      }
+                                    }}
+                                  />
                                 )}
+
+                                {/* Delete Custom Photos directly. If staff, can modify or delete! */}
+                                {isStaffLoggedIn && (
+                                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10 transition scale-95 group-hover:scale-100">
+                                    {matchedProduct && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (typeof matchedProduct.id === 'number') {
+                                            setEditingProduct(matchedProduct as Product);
+                                          } else {
+                                            setEditingSolar(matchedProduct as SolarProduct);
+                                          }
+                                        }}
+                                        className="p-1.5 bg-zinc-900/90 border border-zinc-700 hover:bg-[#F5C518] hover:text-black font-bold text-zinc-100 rounded-lg transition-colors flex items-center shadow-lg"
+                                        title="Quick Edit specs"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteCustomPhoto(img.id, img.productCode);
+                                      }}
+                                      className="p-1.5 bg-red-950/85 hover:bg-red-900 border border-red-800 text-red-200 rounded-lg transition flex items-center shadow-lg animate-fade-in"
+                                      title="Delete illustration"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-100" />
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Info Section */}
+                                <div className="p-3 text-left space-y-1">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <h4 className="text-xs font-bold text-zinc-100 line-clamp-1">{img.label}</h4>
+                                    {img.productCode && (
+                                      <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] font-mono font-bold rounded border border-zinc-800 shrink-0 uppercase">
+                                        {img.productCode}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-zinc-500 mt-0.5 leading-normal line-clamp-2">{img.sub}</p>
+                                  
+                                  {matchedProduct && (
+                                    <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
+                                      <span className="text-[10px] text-[#F5C518] font-bold font-mono">
+                                        {img.price || matchedProduct.price}
+                                      </span>
+                                      
+                                      <div className="flex gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedProduct(matchedProduct)}
+                                          className="text-[9px] bg-zinc-900 hover:bg-zinc-800 border border-zinc-805 text-zinc-300 font-bold px-2 py-0.5 rounded transition uppercase"
+                                        >
+                                          View Info →
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-[10px] text-zinc-500 mt-0.5 leading-normal line-clamp-2">{img.sub}</p>
-                              
-                              {matchedProduct && (
-                                <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
-                                  <span className="text-[10px] text-[#F5C518] font-bold font-mono">
-                                    {img.price || matchedProduct.price}
-                                  </span>
-                                  <button
-                                    onClick={() => setSelectedProduct(matchedProduct)}
-                                    className="text-[9px] bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold px-2 py-0.5 rounded transition uppercase"
-                                  >
-                                    View Product →
-                                  </button>
+                            );
+                          })
+                        )}
+                      </div>
+                      <p className="text-[9px] text-zinc-500 text-center italic py-2">
+                        "Authorized operators can generate stunning product photography matching store inventories."
+                      </p>
+                    </div>
+                  )}
+
+                  {/* EDIT STANDARD PRODUCT MODAL */}
+                  {editingProduct && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+                      <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
+                        <div className="flex justify-between items-center border-b border-[#212121] pb-2">
+                          <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">✏️ Modify Product Specs</h3>
+                          <button type="button" onClick={() => setEditingProduct(null)} className="text-zinc-500 hover:text-zinc-350 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3 text-[11px] max-h-[60vh] overflow-y-auto pr-1 scrollbar-none">
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Part Number / Unique Code</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                              value={editingProduct.pn}
+                              onChange={e => setEditingProduct({ ...editingProduct, pn: e.target.value })}
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Name</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                              value={editingProduct.n}
+                              onChange={e => setEditingProduct({ ...editingProduct, n: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category Code</label>
+                            <select 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none"
+                              value={editingProduct.cat}
+                              onChange={e => setEditingProduct({ ...editingProduct, cat: e.target.value })}
+                            >
+                              {CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price Marker</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. ₦1,250,000 or CALL"
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                              value={editingProduct.price}
+                              onChange={e => setEditingProduct({ ...editingProduct, price: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical Specifications</label>
+                            <textarea 
+                              rows={2}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                              value={editingProduct.sp}
+                              onChange={e => setEditingProduct({ ...editingProduct, sp: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Description / Footnotes</label>
+                            <textarea 
+                              rows={2}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                              value={editingProduct.desc || ''}
+                              onChange={e => setEditingProduct({ ...editingProduct, desc: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Photo</label>
+                            <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-900 p-2 rounded">
+                              {editingProduct.imageUrl ? (
+                                <img src={editingProduct.imageUrl} className="w-12 h-12 object-cover rounded border border-zinc-800" />
+                              ) : (
+                                <div className="w-12 h-12 flex items-center justify-center bg-zinc-900 border border-zinc-850 rounded text-zinc-500">
+                                  <Image className="w-5 h-5" />
                                 </div>
                               )}
+                              <label className="flex-1 py-1.5 px-3 bg-zinc-900 border border-zinc-855 hover:bg-zinc-800 text-[#F5C518] hover:text-amber-400 text-[10px] font-extrabold uppercase text-center rounded cursor-pointer transition flex items-center justify-center gap-1.5 font-sans">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Modify / Upload Photo</span>
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  className="hidden" 
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const reader = new FileReader();
+                                      reader.onload = async () => {
+                                        try {
+                                          const dataUrl = reader.result as string;
+                                          const compressed = await compressImage(dataUrl);
+                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          setEditingProduct({ ...editingProduct, imageUrl: finalUrl });
+                                          alert("📷 Photo uploaded!");
+                                        } catch (innerErr: any) {
+                                          alert("Upload error: " + innerErr.message);
+                                        }
+                                      };
+                                      reader.readAsDataURL(file);
+                                    } catch (err: any) {
+                                      alert("Upload failed: " + err.message);
+                                    }
+                                  }}
+                                />
+                              </label>
                             </div>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        </div>
 
-                  <p className="text-[9px] text-zinc-500 text-center italic py-2">
-                    "Authorized operators can generate stunning product photography matching store inventories."
-                  </p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!editingProduct.pn.trim()) return alert("Part number/code is required!");
+                            await handleSaveProduct(editingProduct);
+                            setEditingProduct(null);
+                            alert("✅ Specifications successfully saved!");
+                          }}
+                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
+                        >
+                          Apply System Specs
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* EDIT SOLAR PRODUCT MODAL */}
+                  {editingSolar && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+                      <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
+                        <div className="flex justify-between items-center border-b border-[#212121] pb-2">
+                          <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">✏️ Modify Solar Packaging</h3>
+                          <button type="button" onClick={() => setEditingSolar(null)} className="text-zinc-500 hover:text-zinc-350 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3 text-[11px] max-h-[60vh] overflow-y-auto pr-1 scrollbar-none">
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Configuration Code/ID</label>
+                            <input 
+                              type="text" 
+                              readOnly
+                              className="w-full bg-zinc-900 border border-zinc-900 p-2 rounded text-zinc-400 font-mono outline-none cursor-not-allowed"
+                              value={editingSolar.id}
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Equipment brand</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700 font-mono"
+                              value={editingSolar.brand}
+                              onChange={e => setEditingSolar({ ...editingSolar, brand: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Model Name / Capacity</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                              value={editingSolar.n}
+                              onChange={e => setEditingSolar({ ...editingSolar, n: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category</label>
+                            <select 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none"
+                              value={editingSolar.cat}
+                              onChange={e => setEditingSolar({ ...editingSolar, cat: e.target.value as any })}
+                            >
+                              {['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price Tag</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. ₦1,250,000"
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                              value={editingSolar.price}
+                              onChange={e => setEditingSolar({ ...editingSolar, price: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical specification block</label>
+                            <textarea 
+                              rows={2}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700 cursor-text"
+                              value={editingSolar.sp}
+                              onChange={e => setEditingSolar({ ...editingSolar, sp: e.target.value })}
+                            />
+                          </div>
+
+                           <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Description / Package lists</label>
+                            <textarea 
+                              rows={2}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                              value={editingSolar.desc || ''}
+                              onChange={e => setEditingSolar({ ...editingSolar, desc: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Photo</label>
+                            <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-900 p-2 rounded">
+                              {editingSolar.imageUrl ? (
+                                <img src={editingSolar.imageUrl} className="w-12 h-12 object-cover rounded border border-zinc-800" />
+                              ) : (
+                                <div className="w-12 h-12 flex items-center justify-center bg-zinc-900 border border-zinc-850 rounded text-zinc-500">
+                                  <Image className="w-5 h-5" />
+                                </div>
+                              )}
+                              <label className="flex-1 py-1.5 px-3 bg-zinc-900 border border-zinc-855 hover:bg-zinc-800 text-[#F5C518] hover:text-amber-400 text-[10px] font-extrabold uppercase text-center rounded cursor-pointer transition flex items-center justify-center gap-1.5 font-sans">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Modify / Upload Photo</span>
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  className="hidden" 
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const reader = new FileReader();
+                                      reader.onload = async () => {
+                                        try {
+                                          const dataUrl = reader.result as string;
+                                          const compressed = await compressImage(dataUrl);
+                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          setEditingSolar({ ...editingSolar, imageUrl: finalUrl });
+                                          alert("📷 Photo uploaded!");
+                                        } catch (innerErr: any) {
+                                          alert("Upload error: " + innerErr.message);
+                                        }
+                                      };
+                                      reader.readAsDataURL(file);
+                                    } catch (err: any) {
+                                      alert("Upload failed: " + err.message);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!editingSolar.id.trim()) return alert("Code/ID is required!");
+                            await handleSaveSolarProduct(editingSolar);
+                            setEditingSolar(null);
+                            alert("✅ Solar packaging updated successfully!");
+                          }}
+                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
+                        >
+                          Save Solar Configurations
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CREATE PRODUCT MODAL */}
+                  {showCreateProductModal && (
+                    <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+                      <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
+                        <div className="flex justify-between items-center border-b border-[#212121] pb-2">
+                          <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">➕ Create New Product Card</h3>
+                          <button type="button" onClick={() => setShowCreateProductModal(false)} className="text-zinc-500 hover:text-zinc-350 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* SELECT TYPE TO CREATE */}
+                        <div className="flex bg-zinc-950 border border-zinc-900 rounded p-1 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setCreateProductType('standard')}
+                            className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
+                              createProductType === 'standard' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
+                            }`}
+                          >
+                            Standard Product
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCreateProductType('solar')}
+                            className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
+                              createProductType === 'solar' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
+                            }`}
+                          >
+                            Solar Package
+                          </button>
+                        </div>
+
+                        <div className="space-y-3 text-[11px] max-h-[55vh] overflow-y-auto pr-1 scrollbar-none">
+                          {createProductType === 'standard' ? (
+                            <>
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Part Number (Product Code)</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. PN-HP430"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                                  value={newProductForm.pn || ''}
+                                  onChange={e => setNewProductForm({ ...newProductForm, pn: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Name</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="or leave as 'Unmade'"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                                  value={newProductForm.n || ''}
+                                  onChange={e => setNewProductForm({ ...newProductForm, n: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category</label>
+                                <select 
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none"
+                                  value={newProductForm.cat || 'laptops'}
+                                  onChange={e => setNewProductForm({ ...newProductForm, cat: e.target.value })}
+                                >
+                                  {CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price Marker</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. ₦1,250,000 or CALL"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                                  value={newProductForm.price || 'CALL'}
+                                  onChange={e => setNewProductForm({ ...newProductForm, price: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Specification Specs</label>
+                                <textarea 
+                                  rows={2}
+                                  placeholder="Enter hardware particulars..."
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                                  value={newProductForm.sp || ''}
+                                  onChange={e => setNewProductForm({ ...newProductForm, sp: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Detailed Description</label>
+                                <textarea 
+                                  rows={2}
+                                  placeholder="Enter overview notes"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                                  value={newProductForm.desc || ''}
+                                  onChange={e => setNewProductForm({ ...newProductForm, desc: e.target.value })}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Configuration unique ID</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. SOLAR-LITHIUM-G1"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700 uppercase"
+                                  value={newSolarForm.id || ''}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, id: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Equipment Brand</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. Felicity, Huawei"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700 font-mono"
+                                  value={newSolarForm.brand || ''}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, brand: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Model Name / Capacity</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="or leave as 'Unmade'"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                                  value={newSolarForm.n || ''}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, n: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category Selection</label>
+                                <select 
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none animate-fade-in"
+                                  value={newSolarForm.cat || 'Inverters'}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, cat: e.target.value as any })}
+                                >
+                                  {['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Pricing Detail</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. ₦1,250,000"
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                                  value={newSolarForm.price || '₦'}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, price: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical specification block</label>
+                                <textarea 
+                                  rows={2}
+                                  placeholder="Describe capacities, voltages, sizes..."
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                                  value={newSolarForm.sp || ''}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, sp: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Package listings / Description</label>
+                                <textarea 
+                                  rows={2}
+                                  placeholder="Enter list of items included..."
+                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                                  value={newSolarForm.desc || ''}
+                                  onChange={e => setNewSolarForm({ ...newSolarForm, desc: e.target.value })}
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (createProductType === 'standard') {
+                              if (!newProductForm.pn || !newProductForm.pn.trim()) return alert("Part Number (code) is required!");
+                              const payload: Product = {
+                                id: Number(newProductForm.id || Date.now()),
+                                pn: newProductForm.pn.trim(),
+                                cat: newProductForm.cat || 'laptops',
+                                n: (newProductForm.n || 'Unmade').trim(),
+                                sp: newProductForm.sp || 'System specifications pending customer verification',
+                                price: newProductForm.price || 'CALL',
+                                desc: newProductForm.desc || 'Awaiting complete technical specification details.'
+                              };
+                              await handleSaveProduct(payload);
+                            } else {
+                              if (!newSolarForm.id || !newSolarForm.id.trim()) return alert("Solar configuration ID is required!");
+                              const payload: SolarProduct = {
+                                id: newSolarForm.id.trim().toUpperCase(),
+                                cat: newSolarForm.cat as any || 'Inverters',
+                                n: (newSolarForm.n || 'Unmade').trim(),
+                                brand: (newSolarForm.brand || 'Generic').trim(),
+                                sp: newSolarForm.sp || 'System specifications pending customer verification',
+                                price: newSolarForm.price || '₦',
+                                desc: newSolarForm.desc || 'Awaiting complete technical specification details.'
+                              };
+                              await handleSaveSolarProduct(payload);
+                            }
+                            setShowCreateProductModal(false);
+                            alert("🎉 System product registered inside database!");
+                          }}
+                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-[#0a0a0a] text-xs uppercase rounded-lg transition-colors"
+                        >
+                          Create System Product Spec
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               );
             })()}
@@ -2376,16 +3675,16 @@ Message: ${quickMessageText}`;
                     <MapPin className="text-[#CC0000] w-5 h-5 shrink-0 mt-0.5" />
                     <div>
                       <h4 className="font-bold text-zinc-200">HiTech Emporium Warehouse</h4>
-                      <p className="text-zinc-400 mt-1">{STORE.addr}</p>
+                      <p className="text-zinc-400 mt-1">{STORE.address}</p>
                       <p className="text-[#F5C518] mt-1 font-semibold">{STORE.hours}</p>
-                      <p className="text-zinc-500 mt-0.5">Phone: {STORE.phone}</p>
+                      <p className="text-zinc-500 mt-0.5">Phone: +{WA_SALES}</p>
                     </div>
                   </div>
 
                   {/* Directions helper */}
                   <div className="pt-2 border-t border-[#262626]">
                     <button 
-                      onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(STORE.addr)}`, '_blank')}
+                      onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(STORE.address)}`, '_blank')}
                       className="w-full py-1.5 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-[#F5C518] font-sans font-bold uppercase rounded text-xs text-center"
                     >
                       Get Directions via Google Maps →
@@ -2500,6 +3799,8 @@ Message: ${quickMessageText}`;
                 onRemoveVideo={handleRemoveVideo}
                 galleryPhotos={galleryPhotos}
                 onUpdateGalleryPhotos={saveGalleryPhotosToStorage}
+                cloudinaryConfig={cloudinaryConfig}
+                onUpdateCloudinaryConfig={handleUpdateCloudinaryConfig}
               />
             )}
 
@@ -2508,7 +3809,7 @@ Message: ${quickMessageText}`;
           {/* FIXED BOTTOM NAVIGATION BAR BAR */}
           <nav id="nav" className="fixed bottom-0 left-1/2 -translate-x-1/2 bg-[#0a0a0a] border-t border-[#262626] w-full max-w-[430px] flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0">
             {[
-              { id: 'showroom', label: 'Show', icon: <LayoutGrid className="w-4 h-4" /> },
+              { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },
               { id: 'solar', label: 'Solar', icon: <Sun className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'channels', label: 'Channels', icon: <Radio className="w-4 h-4" /> },
@@ -2569,6 +3870,25 @@ Message: ${quickMessageText}`;
         imageCache={imageCache}
         onUpdateImageCache={handleUpdateImageCache}
         onTriggerEnquiry={(msg) => openWhatsAppLink(contacts.sales, msg)}
+        isStaffLoggedIn={isStaffLoggedIn}
+        onEdit={(p) => {
+          setSelectedProduct(null);
+          if (typeof p.id === 'string') {
+            setEditingSolar(p as SolarProduct);
+          } else {
+            setEditingProduct(p as Product);
+          }
+        }}
+        onChangePhoto={async (p, finalUrl) => {
+          if (typeof p.id === 'string') {
+            const updated = { ...p, imageUrl: finalUrl } as SolarProduct;
+            await handleSaveSolarProduct(updated);
+          } else {
+            const updated = { ...p, imageUrl: finalUrl } as Product;
+            await handleSaveProduct(updated);
+          }
+        }}
+        cloudinaryConfig={cloudinaryConfig}
       />
 
     </div>
