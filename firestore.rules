@@ -67,15 +67,16 @@ service cloud.firestore {
 
     // HELPER: Validate client-provided GalleryPhoto card
     function isValidGalleryPhoto(data) {
-      return data.keys.hasAll(['id', 'url', 'label', 'sub', 'productCode', 'price', 'isCustom'])
-        && data.keys.size() == 7
+      return data.keys().hasAll(['id', 'url', 'label', 'sub', 'productCode', 'price', 'isCustom'])
+        && (data.keys().size() == 7 || (data.keys().size() == 8 && data.keys().hasAll(['fallbackUrl'])))
         && data.id is string && data.id.size() <= 128
         && data.url is string && data.url.size() <= 1000000 
         && data.label is string && data.label.size() <= 256
         && data.sub is string && data.sub.size() <= 1000
         && data.productCode is string && data.productCode.size() <= 128
         && data.price is string && data.price.size() <= 128
-        && data.isCustom is bool;
+        && data.isCustom is bool
+        && (!data.keys().hasAll(['fallbackUrl']) || (data.fallbackUrl is string && data.fallbackUrl.size() <= 1000000));
     }
 
     // Rule match block: Reviews

@@ -140,6 +140,10 @@
           "type": "string",
           "description": "The base64 string or public cloud image URL."
         },
+        "fallbackUrl": {
+          "type": "string",
+          "description": "Persistent compressed client-side fallback image base64 data."
+        },
         "label": {
           "type": "string",
           "description": "Binding descriptive label."

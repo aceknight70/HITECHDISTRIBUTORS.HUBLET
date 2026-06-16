@@ -135,6 +135,9 @@ export default function ProductDetailOverlay({
               src={localImageUrl} 
               alt={product.n} 
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = getDefaultProductImage(product);
+              }}
             />
           ) : (
             <div className="p-4 text-center space-y-2">

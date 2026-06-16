@@ -22,6 +22,7 @@ import {
 } from '../lib/sheetsService';
 import { User } from 'firebase/auth';
 import { parsePdfFile, runPdfAutoMatcher } from '../lib/pdfParserService';
+import { compressImage } from '../lib/imageCompressor';
 
 // WhatsApp Utility with special formatting for Nigerian phone numbers (+234)
 const getWhatsAppUrl = (phone: string, text: string) => {
@@ -126,7 +127,7 @@ export default function StaffRoom({
     let successCount = 0;
     const newPhotosList: any[] = [];
     
-    for (let i = 0; i < files.length; i++) {
+     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.type.startsWith('image/')) {
         continue;
@@ -136,10 +137,14 @@ export default function StaffRoom({
         const reader = new FileReader();
         reader.onloadend = async () => {
           try {
+            const rawDataUrl = reader.result as string;
+            // Compress image client-side to make it lightweight
+            const compressedBase64 = await compressImage(rawDataUrl);
+
             const uploadRes = await fetch('/api/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: file.name, base64Data: reader.result as string })
+              body: JSON.stringify({ filename: file.name, base64Data: compressedBase64 })
             });
             if (!uploadRes.ok) throw new Error("Upload failed");
             const uploadData = await uploadRes.json();
@@ -147,6 +152,7 @@ export default function StaffRoom({
             const newPhoto = {
               id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
               url: uploadData.url,
+              fallbackUrl: compressedBase64,
               label: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
               sub: '',
               productCode: '',
@@ -157,9 +163,12 @@ export default function StaffRoom({
             successCount++;
           } catch (err: any) {
             console.error("Failed uploading live photo asset: ", err);
+            const rawDataUrl = reader.result as string;
+            const compressedFallback = await compressImage(rawDataUrl);
             const fbPhoto = {
               id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-              url: reader.result as string,
+              url: compressedFallback,
+              fallbackUrl: compressedFallback,
               label: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
               sub: '',
               productCode: '',
@@ -3105,6 +3114,11 @@ export default function StaffRoom({
                           src={diff.url}
                           alt="preview"
                           className="w-12 h-12 object-cover rounded-lg border border-[#262626]"
+                          onError={(e) => {
+                            if (diff.fallbackUrl && e.currentTarget.src !== diff.fallbackUrl) {
+                              e.currentTarget.src = diff.fallbackUrl;
+                            }
+                          }}
                         />
                         <div className="flex-1 space-y-0.5">
                           <div className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide truncate">
