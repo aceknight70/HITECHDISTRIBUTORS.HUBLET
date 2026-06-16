@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 const resultsFile = 'image_analysis_results.json';
-const uploadsDir = 'uploads';
+const uploadsDir = path.join('public', 'uploads');
 
 interface ImageAnalysis {
   file: string;

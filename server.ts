@@ -306,7 +306,7 @@ Include a 2-3 sentence technician's explanation suggesting the likely underlying
 });
 
 // Create uploads folder if it doesn't exist
-const uploadsDir = path.join(myDirname, 'uploads');
+const uploadsDir = path.join(myDirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
