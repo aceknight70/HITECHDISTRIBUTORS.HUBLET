@@ -7,11 +7,34 @@ export async function uploadImageToCDNOrLocal(
   base64Data: string,
   cloudinaryConfig?: { cloudName: string; uploadPreset: string }
 ): Promise<string> {
-  const isCloudinaryActive = !!(cloudinaryConfig?.cloudName && cloudinaryConfig?.uploadPreset);
+  const cloudName = cloudinaryConfig?.cloudName?.trim() || '';
+  const uploadPreset = cloudinaryConfig?.uploadPreset?.trim() || '';
+
+  const isPlaceholder = (val: string) => {
+    if (!val) return true;
+    const lower = val.toLowerCase();
+    return (
+      lower.includes('placeholder') ||
+      lower.includes('your-') ||
+      lower.includes('your_') ||
+      lower.includes('<') ||
+      lower.includes('>') ||
+      lower === 'test' ||
+      lower === 'null' ||
+      lower === 'undefined'
+    );
+  };
+
+  const isCloudinaryActive = !!(
+    cloudName &&
+    uploadPreset &&
+    !isPlaceholder(cloudName) &&
+    !isPlaceholder(uploadPreset)
+  );
 
   if (isCloudinaryActive) {
     try {
-      console.log(`[Cloudinary] Starting CDN upload to cloud "${cloudinaryConfig.cloudName}" for ${filename}...`);
+      console.log(`[Cloudinary] Starting CDN upload to cloud "${cloudName}" for ${filename}...`);
       
       // Ensure the payload is a valid full data URL as Cloudinary accepts it directly
       let filePayload = base64Data;
@@ -21,14 +44,14 @@ export async function uploadImageToCDNOrLocal(
 
       const formData = new FormData();
       formData.append('file', filePayload);
-      formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+      formData.append('upload_preset', uploadPreset);
       
       // Generate a clean safe public ID
       const safeBase = filename.split('.')[0] || 'photo';
       const cleanSafeBase = safeBase.replace(/[^a-zA-Z0-9_\-]/g, '_');
       formData.append('public_id', `hitech_${Date.now()}_${cleanSafeBase}`);
 
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`, {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -45,7 +68,7 @@ export async function uploadImageToCDNOrLocal(
       }
       throw new Error("Cloudinary response did not contain a 'secure_url'.");
     } catch (error: any) {
-      console.error("[Cloudinary] Upload failed. Falling back to local Express upload. Error details: ", error);
+      console.warn("[Cloudinary] Upload fallback to local storage initiated. Details: ", error?.message || error);
     }
   }
 

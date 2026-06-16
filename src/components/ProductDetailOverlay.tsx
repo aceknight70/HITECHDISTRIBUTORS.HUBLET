@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingCart, MessageSquare, Image, Cpu, Check, Upload } from 'lucide-react';
+import { X, ShoppingCart, MessageSquare, Image, Cpu, Check, Upload, Trash2 } from 'lucide-react';
 import { Product, SolarProduct } from '../types';
 import { compressImage } from '../lib/imageCompressor';
 import { uploadImageToCDNOrLocal } from '../lib/cloudinaryService';
@@ -19,6 +19,7 @@ interface ProductDetailOverlayProps {
   onTriggerEnquiry: (msg: string) => void;
   isStaffLoggedIn?: boolean;
   onEdit?: (product: Product | SolarProduct) => void;
+  onDelete?: (product: Product | SolarProduct) => void;
   onChangePhoto?: (product: Product | SolarProduct, imageUrl: string) => void;
   cloudinaryConfig?: { cloudName: string; uploadPreset: string };
 }
@@ -85,6 +86,7 @@ export default function ProductDetailOverlay({
   onTriggerEnquiry,
   isStaffLoggedIn = false,
   onEdit,
+  onDelete,
   onChangePhoto,
   cloudinaryConfig
 }: ProductDetailOverlayProps) {
@@ -134,13 +136,30 @@ export default function ProductDetailOverlay({
             <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
               {isSolar ? 'Solar Setup Portfolio' : (product as Product).cat}
             </span>
-            {isStaffLoggedIn && onEdit && (
-              <button
-                onClick={() => onEdit(product)}
-                className="text-[9px] font-sans font-extrabold uppercase bg-amber-550/10 text-amber-400 hover:bg-amber-500/25 px-2.5 py-1 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
-              >
-                ✏️ Edit Specs
-              </button>
+            {isStaffLoggedIn && (
+              <div className="flex gap-1.5 shrink-0">
+                {onEdit && (
+                  <button
+                    onClick={() => onEdit(product)}
+                    className="text-[9px] font-sans font-extrabold uppercase bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 px-2 py-1 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
+                  >
+                    ✏️ Edit
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete "${product.n}" from database permanently?`)) {
+                        onDelete(product);
+                      }
+                    }}
+                    className="text-[9px] font-sans font-extrabold uppercase bg-red-955/10 text-red-400 hover:bg-red-500/25 px-1.5 py-1 rounded-md border border-red-500/30 flex items-center gap-1 transition-all"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <h2 className="text-lg font-bold text-[#f5f5f5] leading-tight pr-8">{product.n}</h2>

@@ -1640,19 +1640,38 @@ Message: ${quickMessageText}`;
                   }))
               ];
 
-              const filteredCodes = allProductCodes.filter(p => 
-                p.code.toLowerCase().includes(gallerySearchQuery.toLowerCase()) ||
-                p.name.toLowerCase().includes(gallerySearchQuery.toLowerCase())
-              );
+              // Build dynamic virtual gallery items from active products with custom images to attach catalog to showcase
+              const productGalleryItems = allProductCodes
+                .filter(p => p.origin.imageUrl && !galleryPhotos.some(g => g.productCode === p.code))
+                .map(p => ({
+                  id: `prod_gal_${p.idVal}`,
+                  url: p.origin.imageUrl || '',
+                  fallbackUrl: p.origin.imageUrl || '',
+                  label: p.name,
+                  sub: p.spec,
+                  productCode: p.code,
+                  price: p.price,
+                  isCustom: true,
+                  isVirtual: true
+                }));
 
-              const selectedItem = allProductCodes.find(item => item.code === gallerySelectedCode);
+              const combinedPhotos = [...galleryPhotos, ...productGalleryItems];
 
-              // Filter gallery cards according to sub-tab selection
-              const filteredPhotos = galleryPhotos.filter(photo => {
+              const filteredPhotos = combinedPhotos.filter(photo => {
                 if (galleryTab === 'showcase') return !photo.isCustom;
                 if (galleryTab === 'custom') return photo.isCustom;
                 return true; // 'all'
+              }).filter(photo => {
+                if (!gallerySearchQuery.trim()) return true;
+                const query = gallerySearchQuery.toLowerCase();
+                return (
+                  photo.label.toLowerCase().includes(query) ||
+                  photo.sub.toLowerCase().includes(query) ||
+                  photo.productCode.toLowerCase().includes(query)
+                );
               });
+
+              const selectedItem = allProductCodes.find(item => item.code === gallerySelectedCode);
 
 
 
@@ -1710,6 +1729,24 @@ Message: ${quickMessageText}`;
               };
 
               const deleteCustomPhoto = async (id: string | number, code?: string) => {
+                const isVirtual = String(id).startsWith('prod_gal_');
+                if (isVirtual) {
+                  if (window.confirm("Are you sure you want to remove this photo from the product's specifications sheet?")) {
+                    const matchedItem = allProductCodes.find(item => item.code === code);
+                    if (matchedItem) {
+                      if (matchedItem.type === 'solar') {
+                        const updated = { ...matchedItem.origin, imageUrl: '' } as SolarProduct;
+                        await handleSaveSolarProduct(updated);
+                      } else {
+                        const updated = { ...matchedItem.origin, imageUrl: '' } as Product;
+                        await handleSaveProduct(updated);
+                      }
+                      alert("📷 Product image removed successfully!");
+                    }
+                  }
+                  return;
+                }
+
                 if (window.confirm("Are you sure you want to remove this product image from the showcase?")) {
                   const filtered = galleryPhotos.filter(p => p.id !== id);
                   saveGalleryPhotosToStorage(filtered);
@@ -1747,6 +1784,74 @@ Message: ${quickMessageText}`;
                     )}
                   </div>
 
+                  {/* SEARCH AND QUICK-BIND ACCESSORY BAR */}
+                  {galleryTab !== 'manage_products' && (
+                    <div className="bg-[#121212] border border-[#212121] rounded-xl p-3 space-y-2.5 text-left animate-fade-in shadow-md">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        {/* Interactive Grid Search Bar */}
+                        <div className="relative flex-1">
+                          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
+                          <input
+                            type="text"
+                            placeholder="Search showcase photos, specs or codes..."
+                            value={gallerySearchQuery}
+                            onChange={e => setGallerySearchQuery(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-700 py-1.5 pl-8 pr-3 rounded-lg text-[10px] text-zinc-100 placeholder-zinc-500 outline-none font-sans"
+                            id="gallery-search-input"
+                          />
+                          {gallerySearchQuery && (
+                            <button
+                              onClick={() => setGallerySearchQuery('')}
+                              className="absolute right-2.5 top-2 text-zinc-500 hover:text-zinc-350 text-[10px] font-bold"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Direct Control Bind Area for Admins / Staff */}
+                        {isStaffLoggedIn && (
+                          <div className="flex gap-1.5 shrink-0">
+                            <select
+                              value={gallerySelectedCode}
+                              onChange={e => setGallerySelectedCode(e.target.value)}
+                              className="bg-zinc-950 border border-zinc-900 rounded-lg py-1 px-2.5 text-[10px] text-[#F5C518] outline-none font-mono"
+                            >
+                              <option value="">-- Code to Bind --</option>
+                              {allProductCodes.map(item => (
+                                <option key={item.code} value={item.code}>
+                                  {item.code} - {item.name.slice(0, 15)}...
+                                </option>
+                              ))}
+                            </select>
+
+                            <label className={`py-1 px-2.5 rounded-lg text-[10px] font-extrabold uppercase flex items-center gap-1 cursor-pointer transition-all ${
+                              gallerySelectedCode 
+                                ? 'bg-[#F5C518] text-black hover:bg-amber-400' 
+                                : 'bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed'
+                            }`}>
+                              <Upload className="w-3 h-3" />
+                              <span>Link Upload</span>
+                              {gallerySelectedCode && (
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={handleFileUpload}
+                                />
+                              )}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                      {isStaffLoggedIn && !gallerySelectedCode && (
+                        <p className="text-[8px] text-zinc-500 font-mono uppercase tracking-wider">
+                          💡 SELECT A PRODUCT CODE ABOVE TO QUICK-UPLOAD PHOTO INSTANTLY BONDED TO SPEC SHEET
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* GALLERY GALLERY FEED SUB-TABS */}
                   <div className="flex gap-1.5 text-[9px] uppercase font-bold border-b border-[#262626] pb-2 pt-2 overflow-x-auto scrollbar-none">
                     {[
@@ -1767,12 +1872,12 @@ Message: ${quickMessageText}`;
                       >
                         {tab.label} ({
                           tab.id === 'showcase' 
-                            ? galleryPhotos.filter(p => !p.isCustom).length 
+                            ? combinedPhotos.filter(p => !p.isCustom).length 
                             : tab.id === 'custom' 
-                              ? galleryPhotos.filter(p => p.isCustom).length 
+                              ? combinedPhotos.filter(p => p.isCustom).length 
                               : tab.id === 'manage_products'
                                 ? (productsList.length + solarProductsList.length)
-                                : galleryPhotos.length
+                                : combinedPhotos.length
                         })
                       </button>
                     ))}
@@ -2294,7 +2399,14 @@ Message: ${quickMessageText}`;
                             return (
                               <div 
                                 key={img.id} 
-                                className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-md relative group hover:border-zinc-700 transition"
+                                onClick={() => {
+                                  if (matchedProduct) {
+                                    setSelectedProduct(matchedProduct);
+                                  }
+                                }}
+                                className={`bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-md relative group hover:border-zinc-700 transition ${
+                                  matchedProduct ? 'cursor-pointer' : ''
+                                }`}
                               >
                                 {isCollageLayout ? (
                                   <div className={`w-full aspect-video p-1.5 gap-1 bg-black/40 ${
@@ -2397,11 +2509,23 @@ Message: ${quickMessageText}`;
                                 <div className="p-3 text-left space-y-1">
                                   <div className="flex justify-between items-start gap-2">
                                     <h4 className="text-xs font-bold text-zinc-100 line-clamp-1">{img.label}</h4>
-                                    {img.productCode && (
-                                      <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] font-mono font-bold rounded border border-zinc-800 shrink-0 uppercase">
-                                        {img.productCode}
-                                      </span>
-                                    )}
+                                    <div className="flex gap-1 items-center shrink-0">
+                                      {img.isVirtual && (
+                                        <span className="text-[7.5px] tracking-[0.05em] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 font-mono font-bold rounded border border-blue-500/10 uppercase">
+                                          Catalog
+                                        </span>
+                                      )}
+                                      {!img.isVirtual && img.isCustom && (
+                                        <span className="text-[7.5px] tracking-[0.05em] px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400 font-mono font-bold rounded border border-indigo-500/10 uppercase">
+                                          Exhibit
+                                        </span>
+                                      )}
+                                      {img.productCode && (
+                                        <span className="text-[8px] tracking-[0.05em] px-1.5 py-0.5 bg-zinc-950 text-[#F5C518] font-mono font-bold rounded border border-zinc-800 uppercase">
+                                          {img.productCode}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <p className="text-[10px] text-zinc-500 mt-0.5 leading-normal line-clamp-2">{img.sub}</p>
                                   
@@ -3877,6 +4001,16 @@ Message: ${quickMessageText}`;
             setEditingSolar(p as SolarProduct);
           } else {
             setEditingProduct(p as Product);
+          }
+        }}
+        onDelete={async (p) => {
+          setSelectedProduct(null);
+          if (typeof p.id === 'string') {
+            await handleDeleteSolarProduct(p.id);
+            alert("🗑️ Solar configuration deleted from system!");
+          } else {
+            await handleDeleteProduct(p.id);
+            alert("🗑️ Product deleted from system!");
           }
         }}
         onChangePhoto={async (p, finalUrl) => {
