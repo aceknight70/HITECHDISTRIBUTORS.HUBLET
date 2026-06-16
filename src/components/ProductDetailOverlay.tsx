@@ -17,6 +17,58 @@ interface ProductDetailOverlayProps {
   onTriggerEnquiry: (msg: string) => void;
 }
 
+export function getDefaultProductImage(product: Product | SolarProduct): string {
+  const isSolar = typeof product.id === 'string';
+  const name = product.n.toLowerCase();
+  
+  if (isSolar) {
+    const cat = (product as SolarProduct).cat;
+    if (cat === 'Inverters' || name.includes('inverter')) {
+      if (name.includes('hybrid')) {
+        return 'https://images.unsplash.com/photo-1620038650424-85e6ebd9592f?auto=format&fit=crop&w=600&q=80';
+      }
+      return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat === 'Lithium Batteries' || name.includes('lithium')) {
+      return 'https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat === 'Tubular Battery' || name.includes('tubular') || name.includes('battery')) {
+      return 'https://images.unsplash.com/photo-1620714223084-8fcacc6dfd8d?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat === 'Solar Panels' || name.includes('panel')) {
+      return 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat === 'Controllers' || name.includes('controller') || name.includes('sccm')) {
+      return 'https://images.unsplash.com/photo-1601524909162-be47142be8be?auto=format&fit=crop&w=600&q=80';
+    }
+    return 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=600&q=80';
+  } else {
+    const cat = (product as Product).cat.toLowerCase();
+    if (cat.includes('laptop')) {
+      if (name.includes('probook') || name.includes('elitebook')) {
+        return 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80';
+      }
+      return 'https://images.unsplash.com/photo-1496181130204-755241524eab?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat.includes('printer')) {
+      if (name.includes('tank') || name.includes('smart')) {
+        return 'https://images.unsplash.com/photo-1612815154858-60aa4c59edd6?auto=format&fit=crop&w=600&q=80';
+      }
+      return 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat.includes('desktop') || cat.includes('all-in-one') || name.includes('all-in-one')) {
+      return 'https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat.includes('camera') || name.includes('cctv')) {
+      return 'https://images.unsplash.com/photo-1557862921-37829c790f19?auto=format&fit=crop&w=600&q=80';
+    }
+    if (cat.includes('networking')) {
+      return 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=600&q=80';
+    }
+    return 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80';
+  }
+}
+
 export default function ProductDetailOverlay({
   product,
   onClose,
@@ -34,10 +86,12 @@ export default function ProductDetailOverlay({
       return;
     }
     const cacheKey = product.id.toString();
-    if (imageCache[cacheKey]) {
+    if (product.imageUrl) {
+      setLocalImageUrl(product.imageUrl);
+    } else if (imageCache[cacheKey]) {
       setLocalImageUrl(imageCache[cacheKey]);
     } else {
-      setLocalImageUrl(null);
+      setLocalImageUrl(getDefaultProductImage(product));
     }
   }, [product, imageCache]);
 

@@ -17,7 +17,8 @@ const myDirname = path.resolve();
 import { PRODS, SOLAR } from './src/data.ts';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const api_key = process.env.GEMINI_API_KEY;
 
@@ -304,6 +305,177 @@ Include a 2-3 sentence technician's explanation suggesting the likely underlying
   }
 });
 
+// Create uploads folder if it doesn't exist
+const uploadsDir = path.join(myDirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Serve uploaded images statically
+app.use('/uploads', express.static(uploadsDir));
+
+// API Endpoint: LOCAL DEPLOYMENT IMAGE UPLOAD (Cloudinary Alternative)
+app.post('/api/upload', (req, res) => {
+  try {
+    const { filename, base64Data } = req.body;
+    if (!filename || !base64Data) {
+      return res.status(400).json({ error: "Missing filename or base64Data" });
+    }
+
+    // Extract raw base64 data from the data URL prefix if present
+    let cleanBase64 = base64Data;
+    if (base64Data.includes('base64,')) {
+      cleanBase64 = base64Data.split('base64,')[1];
+    }
+
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    
+    // Clean up filename to prevent directory traversal
+    const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const finalFilename = `${Date.now()}_${safeFilename}`;
+    const filePath = path.join(uploadsDir, finalFilename);
+
+    fs.writeFileSync(filePath, buffer);
+
+    res.json({ url: `/uploads/${finalFilename}` });
+  } catch (error: any) {
+    console.error("Local file upload error:", error);
+    res.status(500).json({ error: error.message || "Failed to save file" });
+  }
+});
+
+// API Endpoint: PDF PARSER AND EXTRACTING INTEL
+app.post('/api/pdf/parse', async (req, res) => {
+  try {
+    const { base64Data, filename, type } = req.body;
+    if (!base64Data || !type) {
+      return res.status(400).json({ error: "Missing base64Data or type" });
+    }
+
+    if (!ai) {
+      // Mock / simple fallback response when NO Gemini API key is configured
+      if (type === 'product') {
+        return res.json({
+          products: [
+            {
+              productCode: "GEN-12V220AHTUBULAR",
+              name: "Generic 12V 220Ah Tubular Battery",
+              price: "₦260,000",
+              specs: "12V · 220Ah tall tubular backup block",
+              description: "High performance deep cycle tabular lead acid cell"
+            },
+            {
+              productCode: "GRO-6KWHYBRID",
+              name: "Growatt 6KW Hybrid Inverter",
+              price: "₦680,000",
+              specs: "6KW · 48V · Dual MPPT tracking",
+              description: "Premium hybrid utility management unit with solar priority blending"
+            }
+          ]
+        });
+      } else {
+        return res.json({
+          mappings: [
+            {
+              imageFilename: "GEN-12V220AHTUBULAR_front.jpg",
+              productCode: "GEN-12V220AHTUBULAR"
+            },
+            {
+              imageFilename: "GRO-6KWHYBRID_front.jpg",
+              productCode: "GRO-6KWHYBRID"
+            }
+          ]
+        });
+      }
+    }
+
+    // Extract raw base64 data if URL prefixed
+    let cleanBase64 = base64Data;
+    if (base64Data.includes('base64,')) {
+      cleanBase64 = base64Data.split('base64,')[1];
+    }
+
+    const filePart = {
+      inlineData: {
+        data: cleanBase64,
+        mimeType: "application/pdf"
+      }
+    };
+
+    let response;
+    if (type === 'product') {
+      const prompt = `You are a professional inventory parsing agent. Extract all products listed inside this PDF catalog document.
+Identify every item name, exact price (look for prices in Nigerian Naira symbolized by ₦ or standard currency annotations like N, which represent Nigerian Naira), product code reference/part number if shown, and specifications.
+Compile and return a structured JSON response of products. All prices should include the '₦' symbol and standard thousands separators.`;
+
+      response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: [filePart, prompt],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              products: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    productCode: { type: Type.STRING, description: "Part Number or unique item identifier e.g., HP-1TJ09A" },
+                    name: { type: Type.STRING, description: "Detailed full product model name" },
+                    price: { type: Type.STRING, description: "Naira price formatted with ₦ or 'CALL'" },
+                    specs: { type: Type.STRING, description: "Short bulleted specifications highlights" },
+                    description: { type: Type.STRING, description: "Clear narrative description" }
+                  },
+                  required: ["productCode", "name", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          }
+        }
+      });
+    } else {
+      const prompt = `You are a digital asset management matching assistant. Read this mapping PDF document. 
+Identify the mappings between image files/references and product catalog IDs.
+An example line matches an image name with a product part number code: e.g. "HP-4ZB97A_front.jpg matches HP-4ZB97A" or similar tabular logs.
+Extract and compile all matched image names and their exact product codes. Return them in a structured JSON response.`;
+
+      response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: [filePart, prompt],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              mappings: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    imageFilename: { type: Type.STRING, description: "The image filename like HP-4ZB97A_front.jpg" },
+                    productCode: { type: Type.STRING, description: "The matched product code or id like HP-4ZB97A" }
+                  },
+                  required: ["imageFilename", "productCode"]
+                }
+              }
+            },
+            required: ["mappings"]
+          }
+        }
+      });
+    }
+
+    const textOutput = response.text || "{}";
+    res.json(JSON.parse(textOutput));
+
+  } catch (error: any) {
+    console.error("PDF parsing endpoint failure: ", error);
+    res.status(500).json({ error: error.message || "An error occurred while parsing the PDF." });
+  }
+});
+
 // Setup Vite Dev Server / Static Asset pipeline
 const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(path.join(myDirname, 'dist'));
 
@@ -329,7 +501,7 @@ async function initServer() {
 
   const PORT = 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`HiTech Distributors Hublet backend running on port ${PORT}`);
+    console.log(`HiTech Distributors backend running on port ${PORT}`);
   });
 }
 

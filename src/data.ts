@@ -92,6 +92,7 @@ export const PRODS: Product[] = [
   {
     id: 2,
     pn: 'HP-2R9H6EA',
+    imageUrl: '/uploads/HP-2R9H6EA_front.jpg',
     cat: 'laptops',
     n: 'HP 250 G8 Laptop',
     sp: 'Intel Core i7 · 8GB RAM · 1TB HDD · 15.6” · FreeDOS',
@@ -102,6 +103,7 @@ export const PRODS: Product[] = [
   {
     id: 3,
     pn: 'HP-14Z79EA',
+    imageUrl: '/uploads/HP-14Z79EA_front.jpg',
     cat: 'laptops',
     n: 'HP 250 G7 Laptop',
     sp: 'Intel Core i5-1035G1 · 8GB RAM · 1TB HDD · 15.6” HD · DVD-RW · DOS',
@@ -139,6 +141,7 @@ export const PRODS: Product[] = [
   {
     id: 7,
     pn: 'HP-32M66EA',
+    imageUrl: '/uploads/HP-32M66EA_front.jpg',
     cat: 'laptops',
     n: 'HP 240 G8 Pentium',
     sp: 'Intel Pentium Silver N5030 (up to 3.1 GHz burst) · 4GB DDR4 · 1TB HDD · DOS',
@@ -148,6 +151,7 @@ export const PRODS: Product[] = [
   {
     id: 8,
     pn: 'HP-7N0F3ES',
+    imageUrl: '/uploads/HP-7N0F3ES_front.jpg',
     cat: 'laptops',
     n: 'HP 240 G9 Laptop',
     sp: 'Intel Core i3-1215U · 8GB DDR4 · 256GB SSD · 14” HD · DOS · Dark Ash Silver',
@@ -157,6 +161,7 @@ export const PRODS: Product[] = [
   {
     id: 9,
     pn: 'HP-1L3W7EA',
+    imageUrl: '/uploads/HP-1L3W7EA_front.jpg',
     cat: 'laptops',
     n: 'HP 240 G7 Laptop',
     sp: 'Intel Core i5-1035G1 · 8GB DDR4 · 1TB HDD · 14” HD · Windows 10 Home · Dark Ash Silver',
@@ -175,6 +180,7 @@ export const PRODS: Product[] = [
   {
     id: 11,
     pn: 'HP-2R411EA',
+    imageUrl: '/uploads/HP-2R411EA_front.jpg',
     cat: 'laptops',
     n: 'HP Laptop 14-cf3016nia',
     sp: 'Intel Core i5-1035G1 · 8GB DDR4 · 1TB HDD · 14” HD SVA · Wi-Fi 6 · Bluetooth 5 · Win 10',
@@ -184,6 +190,7 @@ export const PRODS: Product[] = [
   {
     id: 12,
     pn: 'HP-9B4P0EA',
+    imageUrl: '/uploads/HP-9B4P0EA_front.jpg',
     cat: 'laptops',
     n: 'HP Laptop 14-ep0055nia',
     sp: 'Intel Core i5-1335U · 8GB DDR4 · 512GB SSD · 14”',
@@ -247,6 +254,7 @@ export const PRODS: Product[] = [
   {
     id: 19,
     pn: 'HP-9G1W6ET',
+    imageUrl: '/uploads/HP-9G1W6ET_front.jpg',
     cat: 'laptops',
     n: 'HP ProBook 440 G11 (Core 7)',
     sp: 'Intel Core 7 155U · 16GB DDR5 · 512GB SSD · Fingerprint Reader · Windows 11 · 14”',
@@ -257,6 +265,7 @@ export const PRODS: Product[] = [
   {
     id: 20,
     pn: 'HP-84V4EA',
+    imageUrl: '/uploads/HP-84V4EA_front.jpg',
     cat: 'laptops',
     n: 'HP Pavilion Laptop 13-bb0029nia',
     sp: 'Intel Core i3-1115G4 · 8GB DDR4 · 256GB SSD · 13.3” · Backlit · Windows 10 · Natural Silver',
@@ -347,6 +356,7 @@ export const PRODS: Product[] = [
   {
     id: 30,
     pn: 'HP-350Q2EA',
+    imageUrl: '/uploads/HP-350Q2EA_front.jpg',
     cat: 'laptops',
     n: 'HP Envy 13-bd0007na x360',
     sp: 'Intel Core i5-1135G7 · 8GB DDR4 · 512GB PCIe · Intel Iris Xe · 13.3” FHD Touch · Bang & Olufsen · Pale Gold · Windows 10',
@@ -385,6 +395,7 @@ export const PRODS: Product[] = [
   {
     id: 34,
     pn: 'HP-B13YBEA',
+    imageUrl: '/uploads/HP-B13YBEA_front.jpg',
     cat: 'desktops',
     n: 'HP All-in-One Desktop 22-dg0007nh',
     sp: 'Intel Processor N100 · 8GB DDR5 · 256GB SSD · 22” Display · DOS',
@@ -394,6 +405,7 @@ export const PRODS: Product[] = [
   {
     id: 35,
     pn: 'HP-9M9M9AT',
+    imageUrl: '/uploads/HP-9M9M9AT_front.jpg',
     cat: 'desktops',
     n: 'HP Pro One 240 G10 All-in-One',
     sp: 'Intel Core i3-N300 · 4GB RAM · 512GB SSD · 23.8” Display · Wi-Fi · Bluetooth · DOS',
@@ -477,6 +489,7 @@ export const PRODS: Product[] = [
   {
     id: 44,
     pn: 'HP-4ZB84A',
+    imageUrl: '/uploads/HP-4ZB84A_front.jpg',
     cat: 'printers',
     n: 'HP Laser MFP 137fnw Duplex',
     sp: 'Print, Copy, Scan, Fax · Auto Document Feeder (ADF) · Ethernet & Wi-Fi',
@@ -504,6 +517,7 @@ export const PRODS: Product[] = [
   {
     id: 47,
     pn: 'HP-9YG09A',
+    imageUrl: '/uploads/HP-9YG09A_front.jpg',
     cat: 'printers',
     n: 'HP LaserJet MFP M236sdw Dual-Sided',
     sp: 'Print, Copy, Scan · Auto Two-Sided printing · Dual-Band Wi-Fi',
@@ -540,6 +554,7 @@ export const PRODS: Product[] = [
   {
     id: 51,
     pn: 'HP-1TJ09A',
+    imageUrl: '/uploads/HP-1TJ09A_front.jpg',
     cat: 'printers',
     n: 'HP Smart Tank 515 Wireless',
     sp: 'High Volume Ink Tank · Long lasting supply · Beautiful color output',
@@ -549,6 +564,7 @@ export const PRODS: Product[] = [
   {
     id: 52,
     pn: 'HP-3YW70A',
+    imageUrl: '/uploads/HP-3YW70A_front.jpg',
     cat: 'printers',
     n: 'HP Smart Tank 516 Color Printer',
     sp: 'Ink Tank tech · Multi-device wireless connectivity · Direct-feed system',
@@ -558,6 +574,7 @@ export const PRODS: Product[] = [
   {
     id: 53,
     pn: 'HP-3YW73A',
+    imageUrl: '/uploads/HP-3YW73A_front.jpg',
     cat: 'printers',
     n: 'HP Smart Tank 519 AiO Wireless',
     sp: 'Print, Copy, Scan, Mobile · Giant Ink Reservoir · Clean reload bottle design',
@@ -567,6 +584,7 @@ export const PRODS: Product[] = [
   {
     id: 54,
     pn: 'HP-Y0F71A',
+    imageUrl: '/uploads/HP-Y0F71A_front.jpg',
     cat: 'printers',
     n: 'HP Smart Tank 615 Wireless Pro',
     sp: 'Auto Document Feeder · Smart Guided Fax · Dynamic color touch panel',
@@ -576,6 +594,7 @@ export const PRODS: Product[] = [
   {
     id: 55,
     pn: 'HP-6UU47A',
+    imageUrl: '/uploads/HP-6UU47A_front.jpg',
     cat: 'printers',
     n: 'HP Smart Tank 750 AiO',
     sp: 'Auto-Duplex Color Printing · Large Ink Reservoir · Smart buttons security',
@@ -585,6 +604,7 @@ export const PRODS: Product[] = [
   {
     id: 56,
     pn: 'HP-Y0S18AA80',
+    imageUrl: '/uploads/HP-Y0S18AA80_front.jpg',
     cat: 'printers',
     n: 'HP OfficeJet Pro 7720 Wide Format',
     sp: 'A3 Printing · Document Scan/Copy/Fax · Premium heavy workload design',
@@ -594,6 +614,7 @@ export const PRODS: Product[] = [
   {
     id: 57,
     pn: 'HP-G5J38A',
+    imageUrl: '/uploads/HP-G5J38A_front.jpg',
     cat: 'printers',
     n: 'HP OfficeJet Pro 7740 Wide Format',
     sp: 'Double Paper Tray · Auto wide format Duplex · High capacity inks',
@@ -603,6 +624,7 @@ export const PRODS: Product[] = [
   {
     id: 58,
     pn: 'HP-2Z610AB19',
+    imageUrl: '/uploads/HP-2Z610AB19_front.jpg',
     cat: 'printers',
     n: 'HP LaserJet Pro 4003dw',
     sp: 'Enterprise monochrome laser · 40 ppm speed · Dual automatic duplexing',
@@ -612,6 +634,7 @@ export const PRODS: Product[] = [
   {
     id: 59,
     pn: 'HP-7WN42B2',
+    imageUrl: '/uploads/HP-7WN42B2_front.jpg',
     cat: 'printers',
     n: 'HP Color LaserJet 178nw Wireless',
     sp: 'High resolution color output · Compact footprint · Wired or wireless networks',
@@ -621,6 +644,7 @@ export const PRODS: Product[] = [
   {
     id: 60,
     pn: 'HP-4ZB97A',
+    imageUrl: '/uploads/HP-4ZB97A_front.jpg',
     cat: 'printers',
     n: 'HP Color LaserJet MFP 179fnw',
     sp: 'True high fidelity color · Print, Copy, Scan & Fax with cloud integrations',
@@ -686,6 +710,7 @@ export const PRODS: Product[] = [
   {
     id: 67,
     pn: 'BG-1.2KVAIRON',
+    imageUrl: '/uploads/BG-1.2KVAIRON_front.jpg',
     cat: 'accessories',
     n: 'Bluegate 1.2 KVA UPS (Iron casing)',
     sp: '1.2KVA capacity · Rugged heavy-duty casing · Automatic frequency sensing',
@@ -713,6 +738,7 @@ export const PRODS: Product[] = [
   {
     id: 70,
     pn: 'BG-2.0KVAIRON',
+    imageUrl: '/uploads/BG-2.0KVAIRON_front.jpg',
     cat: 'accessories',
     n: 'Bluegate 2.0 KVA UPS (Iron casing)',
     sp: '2KVA heavy workstation protection · Dual battery bank config · Smart cooling',
@@ -758,6 +784,7 @@ export const PRODS: Product[] = [
   {
     id: 75,
     pn: 'BG-10KVAONLINE',
+    imageUrl: '/uploads/BG-10KVAONLINE_front.jpg',
     cat: 'accessories',
     n: 'Bluegate 10KVA Online UPS Hub',
     sp: '10KVA max capacity tower · Hot swappable batteries · Extreme workspace guard',
@@ -785,6 +812,7 @@ export const PRODS: Product[] = [
   {
     id: 78,
     pn: 'BG-2KVASTAB',
+    imageUrl: '/uploads/BG-2KVASTAB_front.jpg',
     cat: 'accessories',
     n: 'Bluegate 2KVA Stabilizer',
     sp: '2KVA voltage regulator · Dual display indicators · Rapid circuit correction',
@@ -803,6 +831,7 @@ export const PRODS: Product[] = [
   {
     id: 80,
     pn: 'EG-650VA',
+    imageUrl: '/uploads/EG-650VA_front.jpg',
     cat: 'accessories',
     n: 'Evergood 650VA UPS stand-by',
     sp: '650VA · Auto frequency correction · High thermal polymer housing',
@@ -898,6 +927,7 @@ export const SOLAR: SolarProduct[] = [
   // Solar Inverters
   {
     id: 'CHO-5KVA48V',
+    imageUrl: '/uploads/CHO-5KVA48V_front.jpg',
     cat: 'Inverters',
     n: 'Choice/Foresolar 5KVA 48V Inverter',
     brand: 'Choice/Foresolar',
@@ -907,6 +937,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'CHO-5KVA24V',
+    imageUrl: '/uploads/CHO-5KVA24V_front.jpg',
     cat: 'Inverters',
     n: 'Choice/Foresolar 5KVA 24V Inverter',
     brand: 'Choice/Foresolar',
@@ -925,6 +956,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'DEKA-3.5KVA24V',
+    imageUrl: '/uploads/DEKA-3.5KVA24V_front.jpg',
     cat: 'Inverters',
     n: 'Deka 3.5KVA 24V Standing Inverter',
     brand: 'Deka',
@@ -934,6 +966,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'CHO-2.5KVA24V',
+    imageUrl: '/uploads/CHO-2.5KVA24V_front.jpg',
     cat: 'Inverters',
     n: 'Choice 2.5KVA 24V Inverter',
     brand: 'Choice',
@@ -943,6 +976,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'CHO-1.5KVA12V',
+    imageUrl: '/uploads/CHO-1.5KVA12V_front.jpg',
     cat: 'Inverters',
     n: 'Choice 1.5KVA 12V Inverter',
     brand: 'Choice',
@@ -952,6 +986,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'GRO-6KWHYBRID',
+    imageUrl: '/uploads/GRO-6KWHYBRID_front.jpg',
     cat: 'Inverters',
     n: 'Growatt 6KW Hybrid Inverter',
     brand: 'Growatt',
@@ -961,6 +996,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'GRO-6KW48V2MPPT',
+    imageUrl: '/uploads/GRO-6KW48V2MPPT_front.jpg',
     cat: 'Inverters',
     n: 'Growatt 6KW 48V 2 MPPT Hybrid',
     brand: 'Growatt',
@@ -979,6 +1015,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'CWO-3.6KVA24VHYBRID',
+    imageUrl: '/uploads/CWO-3.6KVA24VHYBRID_front.jpg',
     cat: 'Inverters',
     n: 'Cworth 3.6KVA 24V Hybrid Inverter',
     brand: 'Cworth',
@@ -1006,6 +1043,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'FEL-IVPS5048',
+    imageUrl: '/uploads/FEL-IVPS5048_front.jpg',
     cat: 'Inverters',
     n: 'Felicity IVPS 5048 5KVA Inverter',
     brand: 'Felicity',
@@ -1044,6 +1082,7 @@ export const SOLAR: SolarProduct[] = [
   // Solar Controllers
   {
     id: 'FEL-SCCM4524',
+    imageUrl: '/uploads/FEL-SCCM4524_front.jpg',
     cat: 'Controllers',
     n: 'Felicity SCCM4524 Solar Controller',
     brand: 'Felicity',
@@ -1053,6 +1092,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'FEL-SCCM6048',
+    imageUrl: '/uploads/FEL-SCCM6048_front.jpg',
     cat: 'Controllers',
     n: 'Felicity SCCM6048 Solar Controller',
     brand: 'Felicity',
@@ -1174,6 +1214,7 @@ export const SOLAR: SolarProduct[] = [
   // Solar Batteries
   {
     id: 'GEN-12V220AHTUBULAR',
+    imageUrl: '/uploads/GEN-12V220AHTUBULAR_front.jpg',
     cat: 'Tubular Battery',
     n: 'Generic 12V 220Ah Tubular Battery',
     brand: 'Generic',
@@ -1183,6 +1224,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'GEN-12.4V2400WLITHIUM',
+    imageUrl: '/uploads/GEN-12.4V2400WLITHIUM_front.jpg',
     cat: 'Lithium Batteries',
     n: 'Generic 12.4V 2400W Lithium Battery',
     brand: 'Generic',
@@ -1192,6 +1234,7 @@ export const SOLAR: SolarProduct[] = [
   },
   {
     id: 'DEYE-5KWH48VLITHIUM',
+    imageUrl: '/uploads/DEYE-5KWH48VLITHIUM_front.jpg',
     cat: 'Lithium Batteries',
     n: 'Deye 5KWH 48V Lithium Battery',
     brand: 'Deye',
@@ -1401,94 +1444,545 @@ export const DEFAULT_DEALS: Deal[] = [
 
 export const GALLERY_PHOTOS = [
   {
-    id: 1,
+    id: '1',
     url: 'https://images.unsplash.com/photo-1593642632823-8f785ba67e45?auto=format&fit=crop&w=600&q=80',
     label: 'HiTech Emporium Storefront',
-    sub: '6 Airport Road, Warri · Authorised Distributors'
+    sub: '6 Airport Road, Warri · Authorised Distributors',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 2,
+    id: '2',
     url: 'https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80',
     label: 'Computers & Office Equipment Showroom',
-    sub: 'Warri · Premium setup and professional consultation'
+    sub: 'Warri · Premium setup and professional consultation',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 3,
+    id: '3',
     url: 'https://images.unsplash.com/photo-1612815154858-60aa4c59edd6?auto=format&fit=crop&w=600&q=80',
     label: 'HP Printers & Ink Supply',
-    sub: 'LaserJet · Color Laser · Smart Tank · MFP range'
+    sub: 'LaserJet · Color Laser · Smart Tank · MFP range',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 4,
+    id: '4',
     url: 'https://images.unsplash.com/photo-1557862921-37829c790f19?auto=format&fit=crop&w=600&q=80',
     label: 'Professional Monitor & CCTV Section',
-    sub: 'Display monitors · HD CCTV packages · DVR systems'
+    sub: 'Display monitors · HD CCTV packages · DVR systems',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 5,
+    id: '5',
     url: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=600&q=80',
     label: 'Solar Panel Stocks',
-    sub: 'Jinko Mono Bifacial highly efficient tier-1 panels'
+    sub: 'Jinko Mono Bifacial highly efficient tier-1 panels',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 6,
+    id: '6',
     url: 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=600&q=80',
     label: 'HP Toner & Storage Supplies',
-    sub: 'HP toner · Ink cartridges · Dahua security units'
+    sub: 'HP toner · Ink cartridges · Dahua security units',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 7,
+    id: '7',
     url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80',
     label: 'Accessories & Laptop Essentials',
-    sub: 'CCTV accessories · Ink, keyboards, mice · Store counter'
+    sub: 'CCTV accessories · Ink, keyboards, mice · Store counter',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 8,
+    id: '8',
     url: 'https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=600&q=80',
     label: 'Premium Bluetooth Speakers',
-    sub: 'Zealot high-volume wireless sound speaker systems'
+    sub: 'Zealot high-volume wireless sound speaker systems',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 9,
+    id: '9',
     url: 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?auto=format&fit=crop&w=600&q=80',
     label: 'Smart LED TVs & Business Electronics',
-    sub: 'LG LED TVs · Home theater systems · Full showroom'
+    sub: 'LG LED TVs · Home theater systems · Full showroom',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 10,
+    id: '10',
     url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=600&q=80',
     label: 'Compact Sliders & Digital Cameras',
-    sub: 'Canon DSLRs · High-precision cameras and webcams'
+    sub: 'Canon DSLRs · High-precision cameras and webcams',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 11,
+    id: '11',
     url: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80',
     label: 'Workstation Laptops on Stand',
-    sub: 'HP · Dell · Lenovo laptops on display with diagnostics'
+    sub: 'HP · Dell · Lenovo laptops on display with diagnostics',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 12,
+    id: '12',
     url: 'https://images.unsplash.com/photo-1620038650424-85e6ebd9592f?auto=format&fit=crop&w=600&q=80',
     label: 'Hybrid Inverters & Lithium Cells',
-    sub: 'Hisense/Cworth inverters · Stacking batteries · Solar panels'
+    sub: 'Hisense/Cworth inverters · Stacking batteries · Solar panels',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 13,
+    id: '13',
     url: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=600&q=80',
     label: 'HP Pavilion x360 convertible display',
-    sub: 'Touchscreen · 360° flip · Laptop · Tent · Tablet · Stand modes'
+    sub: 'Touchscreen · 360° flip · Laptop · Tent · Tablet · Stand modes',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 14,
+    id: '14',
     url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80',
     label: 'HP Elite laptop exhibition',
-    sub: 'Converts to 4 modes · Core i5/i7 · 14” FHD Touch screen'
+    sub: 'Converts to 4 modes · Core i5/i7 · 14” FHD Touch screen',
+    productCode: '',
+    price: '',
+    isCustom: false
   },
   {
-    id: 15,
+    id: '15',
     url: 'https://images.unsplash.com/photo-1496181130204-755241524eab?auto=format&fit=crop&w=600&q=80',
     label: 'HP Spectre Premium display card',
-    sub: 'Ultra-slim · Active stylus pen included · Soft touch screen'
+    sub: 'Ultra-slim · Active stylus pen included · Soft touch screen',
+    productCode: '',
+    price: '',
+    isCustom: false
+  },
+  // MAPPED PRODUCT PHOTOS FROM PDF FILE 1 & 2
+  {
+    id: 'gal_pdf_1',
+    url: '/uploads/GEN-12V220AHTUBULAR_front.jpg',
+    label: 'Generic 12V 220Ah Tubular Battery',
+    sub: '12V · 220Ah tall tubular backup block',
+    productCode: 'GEN-12V220AHTUBULAR',
+    price: '₦260,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_2',
+    url: '/uploads/GEN-12.4V2400WLITHIUM_front.jpg',
+    label: 'Generic 12.4V 2400W Lithium Battery',
+    sub: '12.4V · 2400W deep-cycle modular cell',
+    productCode: 'GEN-12.4V2400WLITHIUM',
+    price: '₦250,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_3',
+    url: '/uploads/FEL-SCCM6048_front.jpg',
+    label: 'Felicity SCCM6048 Solar Controller',
+    sub: '60A · 48V · Micro-processor MPPT stabilization',
+    productCode: 'FEL-SCCM6048',
+    price: '₦190,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_4',
+    url: '/uploads/FEL-SCCM4524_front.jpg',
+    label: 'Felicity SCCM4524 Solar Controller',
+    sub: '45A · 12/24V · MPPT solar charger manager',
+    productCode: 'FEL-SCCM4524',
+    price: '₦100,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_5',
+    url: '/uploads/GRO-6KW48V2MPPT_front.jpg',
+    label: 'Growatt 6KW 48V 2 MPPT Hybrid',
+    sub: '6KW · 48V · Advanced 2-MPPT harvesting controller',
+    productCode: 'GRO-6KW48V2MPPT',
+    price: '₦650,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_6',
+    url: '/uploads/FEL-IVPS5048_front.jpg',
+    label: 'Felicity IVPS 5048 5KVA Inverter',
+    sub: '5KVA · 48V · Non-hybrid pure converter',
+    productCode: 'FEL-IVPS5048',
+    price: '₦650,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_8',
+    url: '/uploads/CWO-3.6KVA24VHYBRID_front.jpg',
+    label: 'Cworth 3.6KVA 24V Hybrid Inverter',
+    sub: '3.6KVA · 24V · High output hybrid pure sine',
+    productCode: 'CWO-3.6KVA24VHYBRID',
+    price: '₦430,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_10',
+    url: '/uploads/GRO-6KWHYBRID_front.jpg',
+    label: 'Growatt 6KW Hybrid Inverter',
+    sub: '6KW · 48V · Dual MPPT tracking · Multi grid blending',
+    productCode: 'GRO-6KWHYBRID',
+    price: '₦680,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_11',
+    url: '/uploads/HP-4ZB97A_front.jpg',
+    label: 'HP Color LaserJet MFP 179fnw',
+    sub: 'True high fidelity color · Print, Copy, Scan & Fax with cloud integrations',
+    productCode: 'HP-4ZB97A',
+    price: '₦495,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_12',
+    url: '/uploads/HP-7WN42B2_front.jpg',
+    label: 'HP Color LaserJet 178nw Wireless',
+    sub: 'High resolution color output · Compact footprint · Wired or wireless networks',
+    productCode: 'HP-7WN42B2',
+    price: '₦525,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_13',
+    url: '/uploads/CHO-1.5KVA12V_front.jpg',
+    label: 'Choice 1.5KVA 12V Inverter',
+    sub: '1.5KVA · 12V · Compact single-battery setup',
+    productCode: 'CHO-1.5KVA12V',
+    price: '₦220,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_14',
+    url: '/uploads/HP-2Z610AB19_front.jpg',
+    label: 'HP LaserJet Pro 4003dw',
+    sub: 'Enterprise monochrome laser · 40 ppm speed · Dual automatic duplexing',
+    productCode: 'HP-2Z610AB19',
+    price: '₦520,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_15',
+    url: '/uploads/CHO-2.5KVA24V_front.jpg',
+    label: 'Choice 2.5KVA 24V Inverter',
+    sub: '2.5KVA · 24V · Household pure sine',
+    productCode: 'CHO-2.5KVA24V',
+    price: '₦360,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_16',
+    url: '/uploads/HP-Y0S18AA80_front.jpg',
+    label: 'HP OfficeJet Pro 7720 Wide Format',
+    sub: 'A3 Printing · Document Scan/Copy/Fax · Premium heavy workload design',
+    productCode: 'HP-Y0S18AA80',
+    price: '₦360,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_17',
+    url: '/uploads/HP-G5J38A_front.jpg',
+    label: 'HP OfficeJet Pro 7740 Wide Format',
+    sub: 'Double Paper Tray · Auto wide format Duplex · High capacity inks',
+    productCode: 'HP-G5J38A',
+    price: '₦475,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_18',
+    url: '/uploads/DEKA-3.5KVA24V_front.jpg',
+    label: 'Deka 3.5KVA 24V Standing Inverter',
+    sub: '3.5KVA · 24V · Heavy duty pure sine standing',
+    productCode: 'DEKA-3.5KVA24V',
+    price: '₦360,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_19',
+    url: '/uploads/HP-1TJ09A_front.jpg',
+    label: 'HP Smart Tank 515 Wireless',
+    sub: 'High Volume Ink Tank · Long lasting supply · Beautiful color output',
+    productCode: 'HP-1TJ09A',
+    price: '₦295,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_20',
+    url: '/uploads/HP-3YW70A_front.jpg',
+    label: 'HP Smart Tank 516 Color Printer',
+    sub: 'Ink Tank tech · Multi-device wireless connectivity · Direct-feed system',
+    productCode: 'HP-3YW70A',
+    price: '₦295,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_21',
+    url: '/uploads/HP-3YW73A_front.jpg',
+    label: 'HP Smart Tank 519 AiO Wireless',
+    sub: 'Print, Copy, Scan, Mobile · Giant Ink Reservoir · Clean reload bottle design',
+    productCode: 'HP-3YW73A',
+    price: '₦320,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_22',
+    url: '/uploads/CHO-5KVA24V_front.jpg',
+    label: 'Choice/Foresolar 5KVA 24V Inverter',
+    sub: '5KVA · 24V · Low voltage high output',
+    productCode: 'CHO-5KVA24V',
+    price: '₦520,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_23',
+    url: '/uploads/HP-6UU47A_front.jpg',
+    label: 'HP Smart Tank 750 AiO',
+    sub: 'Auto-Duplex Color Printing · Large Ink Reservoir · Smart buttons security',
+    productCode: 'HP-6UU47A',
+    price: '₦498,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_25',
+    url: '/uploads/CHO-5KVA48V_front.jpg',
+    label: 'Choice/Foresolar 5KVA 48V Inverter',
+    sub: '5KVA · 48V · Home & light commercial backup',
+    productCode: 'CHO-5KVA48V',
+    price: '₦520,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_26',
+    url: '/uploads/HP-Y0F71A_front.jpg',
+    label: 'HP Smart Tank 615 Wireless Pro',
+    sub: 'Auto Document Feeder · Smart Guided Fax · Dynamic color touch panel',
+    productCode: 'HP-Y0F71A',
+    price: '₦398,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_27',
+    url: '/uploads/EG-650VA_front.jpg',
+    label: 'Evergood 650VA UPS stand-by',
+    sub: '650VA · Auto frequency correction · High thermal polymer housing',
+    productCode: 'EG-650VA',
+    price: '₦48,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_28',
+    url: '/uploads/BG-10KVAONLINE_front.jpg',
+    label: 'Bluegate 10KVA Online UPS Hub',
+    sub: '10KVA max capacity tower · Hot swappable batteries · Extreme workspace guard',
+    productCode: 'BG-10KVAONLINE',
+    price: '₦1,650,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_29',
+    url: '/uploads/BG-2KVASTAB_front.jpg',
+    label: 'Bluegate 2KVA Stabilizer',
+    sub: '2KVA voltage regulator · Dual display indicators · Rapid circuit correction',
+    productCode: 'BG-2KVASTAB',
+    price: '₦55,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_30',
+    url: '/uploads/HP-9YG09A_front.jpg',
+    label: 'HP LaserJet MFP M236sdw Dual-Sided',
+    sub: 'Print, Copy, Scan · Auto Two-Sided printing · Dual-Band Wi-Fi',
+    productCode: 'HP-9YG09A',
+    price: '₦380,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_31',
+    url: '/uploads/HP-9YG09A_side.jpg',
+    label: 'HP LaserJet MFP M236sdw Dual-Sided (Side)',
+    sub: 'Alternative view · Auto Two-Sided printing · Dual-Band Wi-Fi',
+    productCode: 'HP-9YG09A',
+    price: '₦380,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_32',
+    url: '/uploads/BG-2.0KVAIRON_front.jpg',
+    label: 'Bluegate 2.0 KVA UPS (Iron casing)',
+    sub: '2KVA heavy workstation protection · Dual battery bank config · Smart cooling',
+    productCode: 'BG-2.0KVAIRON',
+    price: '₦148,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_33',
+    url: '/uploads/BG-1.2KVAIRON_front.jpg',
+    label: 'Bluegate 1.2 KVA UPS (Iron casing)',
+    sub: '1.2KVA capacity · Rugged heavy-duty casing · Automatic frequency sensing',
+    productCode: 'BG-1.2KVAIRON',
+    price: '₦108,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_34',
+    url: '/uploads/BG-1.2KVAIRON_side.jpg',
+    label: 'Bluegate 1.2 KVA UPS (Iron casing) (Side)',
+    sub: 'Alternative view · Rugged heavy-duty casing · Automatic frequency sensing',
+    productCode: 'BG-1.2KVAIRON',
+    price: '₦108,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_35',
+    url: '/uploads/HP-4ZB84A_front.jpg',
+    label: 'HP Laser MFP 137fnw Duplex',
+    sub: 'Print, Copy, Scan, Fax · Auto Document Feeder (ADF) · Ethernet & Wi-Fi',
+    productCode: 'HP-4ZB84A',
+    price: '₦390,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_36',
+    url: '/uploads/HP-84V4EA_front.jpg',
+    label: 'HP Pavilion Laptop 13-bb0029nia',
+    sub: 'Intel Core i3-1115G4 · 8GB DDR4 · 256GB SSD · 13.3” · Backlit · Windows 10',
+    productCode: 'HP-84V4EA',
+    price: '₦650,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_37',
+    url: '/uploads/HP-9G1W6ET_front.jpg',
+    label: 'HP ProBook 440 G11 (Core 7)',
+    sub: 'Intel Core 7 155U · 16GB DDR5 · 512GB SSD · Fingerprint Reader · Windows 11 · 14”',
+    productCode: 'HP-9G1W6ET',
+    price: '₦1,340,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_40',
+    url: '/uploads/DEYE-5KWH48VLITHIUM_front.jpg',
+    label: 'Deye 5KWH 48V Lithium Battery',
+    sub: '5KWH · 48V premium wall mount pack',
+    productCode: 'DEYE-5KWH48VLITHIUM',
+    price: '₦1,050,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_42',
+    url: '/uploads/HP-14Z79EA_front.jpg',
+    label: 'HP 250 G7 Laptop',
+    sub: 'Intel Core i5-1035G1 · 8GB RAM · 1TB HDD · 15.6” HD · DVD-RW · DOS',
+    productCode: 'HP-14Z79EA',
+    price: '₦690,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_44',
+    url: '/uploads/HP-2R9H6EA_front.jpg',
+    label: 'HP 250 G8 Laptop',
+    sub: 'Intel Core i7 · 8GB RAM · 1TB HDD · 15.6” · FreeDOS',
+    productCode: 'HP-2R9H6EA',
+    price: '₦750,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_45',
+    url: '/uploads/HP-32M66EA_front.jpg',
+    label: 'HP 240 G8 Pentium',
+    sub: 'Intel Pentium Silver N5030 · 4GB DDR4 · 1TB HDD · DOS',
+    productCode: 'HP-32M66EA',
+    price: '₦490,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_46',
+    url: '/uploads/HP-7N0F3ES_front.jpg',
+    label: 'HP 240 G9 Laptop',
+    sub: 'Intel Core i3-1215U · 8GB DDR4 · 256GB SSD · 14” HD · DOS',
+    productCode: 'HP-7N0F3ES',
+    price: '₦560,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_47',
+    url: '/uploads/HP-1L3W7EA_front.jpg',
+    label: 'HP 240 G7 Laptop',
+    sub: 'Intel Core i5-1035G1 · 8GB DDR4 · 1TB HDD · 14” HD · Windows 10',
+    productCode: 'HP-1L3W7EA',
+    price: '₦690,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_48',
+    url: '/uploads/HP-2R411EA_front.jpg',
+    label: 'HP Laptop 14-cf3016nia',
+    sub: 'Intel Core i5-1035G1 · 8GB DDR4 · 1TB HDD · 14” HD SVA · Wi-Fi 6 · Bluetooth 5',
+    productCode: 'HP-2R411EA',
+    price: '₦650,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_49',
+    url: '/uploads/HP-9B4P0EA_front.jpg',
+    label: 'HP Laptop 14-ep0055nia',
+    sub: 'Intel Core i5-1335U · 8GB DDR4 · 512GB SSD · 14”',
+    productCode: 'HP-9B4P0EA',
+    price: '₦880,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_55',
+    url: '/uploads/HP-B13YBEA_front.jpg',
+    label: 'HP All-in-One Desktop 22-dg0007nh',
+    sub: 'Intel Processor N100 · 8GB DDR5 · 256GB SSD · 22” Display · DOS',
+    productCode: 'HP-B13YBEA',
+    price: '₦620,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_56',
+    url: '/uploads/HP-350Q2EA_front.jpg',
+    label: 'HP Envy 13-bd0007na x360',
+    sub: 'Intel Core i5-1135G7 · 8GB DDR4 · 512GB PCIe · 13.3” FHD Touch · Bang & Olufsen',
+    productCode: 'HP-350Q2EA',
+    price: '₦1,100,000',
+    isCustom: false
+  },
+  {
+    id: 'gal_pdf_58',
+    url: '/uploads/HP-9M9M9AT_front.jpg',
+    label: 'HP Pro One 240 G10 All-in-One',
+    sub: 'Intel Core i3-N300 · 4GB RAM · 512GB SSD · 23.8” Display · Wi-Fi',
+    productCode: 'HP-9M9M9AT',
+    price: '₦1,080,000',
+    isCustom: false
   }
 ];
 

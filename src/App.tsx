@@ -19,7 +19,7 @@ import {
 import SolarSizingTool from './components/SolarSizingTool';
 import InfoBoothRoom from './components/InfoBoothRoom';
 import StaffRoom from './components/StaffRoom';
-import ProductDetailOverlay from './components/ProductDetailOverlay';
+import ProductDetailOverlay, { getDefaultProductImage } from './components/ProductDetailOverlay';
 import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsService';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
@@ -50,6 +50,69 @@ export default function App() {
     bank: 'Access Bank PLC',
     accountNumber: '1482993021',
     accountName: 'HiTech Distributors Nigeria'
+  });
+
+  const [openingPhotoUrl, setOpeningPhotoUrl] = useState(() => {
+    return localStorage.getItem('ht_opening_photo') || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1600&q=80';
+  });
+  
+  const [liveEmbedUrl, setLiveEmbedUrl] = useState(() => {
+    return localStorage.getItem('ht_live_embed') || 'https://www.youtube.com/embed/live_stream?channel=UC...';
+  });
+
+  const [contacts, setContacts] = useState(() => {
+    try {
+      const stored = localStorage.getItem('ht_contacts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // If the parsed state contains old dummy default placeholder values, migrate them immediately!
+        if (
+          parsed.sales === '2348030000000' || 
+          parsed.inventory === '2348030000001' ||
+          parsed.general === '2348030000002' ||
+          parsed.gm === '2348030000003'
+        ) {
+          return {
+            sales: WA_SALES,
+            inventory: WA_INVENTORY,
+            general: WA_GEN,
+            gm: WA_GM
+          };
+        }
+        return parsed;
+      }
+      return {
+        sales: WA_SALES,
+        inventory: WA_INVENTORY,
+        general: WA_GEN,
+        gm: WA_GM
+      };
+    } catch {
+      return {
+        sales: WA_SALES,
+        inventory: WA_INVENTORY,
+        general: WA_GEN,
+        gm: WA_GM
+      };
+    }
+  });
+
+  const [requestsList, setRequestsList] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem('ht_requests');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [galleryVideos, setGalleryVideos] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem('ht_videos');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
@@ -126,9 +189,9 @@ export default function App() {
         url: photo.url,
         label: photo.label,
         sub: photo.sub || '',
-        productCode: '',
-        price: '',
-        isCustom: false
+        productCode: photo.productCode || '',
+        price: photo.price || '',
+        isCustom: !!photo.isCustom
       }));
     }
   });
@@ -203,8 +266,51 @@ export default function App() {
 
       if (persistedC) setCart(JSON.parse(persistedC));
       if (persistedS) setSolarCart(JSON.parse(persistedS));
-      if (persistedP) setProductsList(JSON.parse(persistedP));
-      if (persistedSolar) setSolarProductsList(JSON.parse(persistedSolar));
+      if (persistedP) {
+        const parsedP: Product[] = JSON.parse(persistedP);
+        const updatedP = parsedP.map(p => {
+          const latest = PRODS.find(item => item.id === p.id || (p.pn && item.pn === p.pn));
+          if (latest) {
+            return {
+              ...p,
+              pn: latest.pn,
+              cat: latest.cat,
+              n: latest.n,
+              sp: latest.sp,
+              price: p.price === 'CALL' ? latest.price : p.price,
+              desc: latest.desc,
+              imageUrl: latest.imageUrl || p.imageUrl
+            };
+          }
+          return p;
+        });
+        setProductsList(updatedP);
+      } else {
+        setProductsList(PRODS);
+      }
+
+      if (persistedSolar) {
+        const parsedSolar: SolarProduct[] = JSON.parse(persistedSolar);
+        const updatedSolar = parsedSolar.map(s => {
+          const latest = SOLAR.find(item => item.id === s.id);
+          if (latest) {
+            return {
+              ...s,
+              cat: latest.cat,
+              n: latest.n,
+              brand: latest.brand,
+              sp: latest.sp,
+              price: s.price || latest.price,
+              desc: latest.desc || s.desc,
+              imageUrl: latest.imageUrl || s.imageUrl
+            };
+          }
+          return s;
+        });
+        setSolarProductsList(updatedSolar);
+      } else {
+        setSolarProductsList(SOLAR);
+      }
       if (persistedD) setDealsList(JSON.parse(persistedD));
       if (persistedBank) setBankAccount(JSON.parse(persistedBank));
       if (persistedStatus) setMgrStatus(persistedStatus as 'available' | 'busy');
@@ -341,9 +447,9 @@ export default function App() {
           url: photo.url,
           label: photo.label,
           sub: photo.sub || '',
-          productCode: '',
-          price: '',
-          isCustom: false
+          productCode: photo.productCode || '',
+          price: photo.price || '',
+          isCustom: !!photo.isCustom
         }));
 
         formattedList.forEach(async (photo) => {
@@ -368,6 +474,47 @@ export default function App() {
             isCustom: !!data.isCustom
           });
         });
+
+        // Dynamic self-healing seed synchronisation for new product catalog images
+        const outOfSyncDefaults = GALLERY_PHOTOS.filter(defP => {
+          const fetched = items.find(item => String(item.id) === String(defP.id));
+          if (!fetched) return true; // Missing entirely
+          // Check if any critical field has changed in the source file
+          return fetched.url !== defP.url ||
+                 fetched.label !== defP.label ||
+                 (fetched.sub || '') !== (defP.sub || '') ||
+                 (fetched.productCode || '') !== (defP.productCode || '') ||
+                 (fetched.price || '') !== (defP.price || '') ||
+                 fetched.isCustom !== (defP.isCustom || false);
+        }).map(p => ({
+          id: String(p.id),
+          url: p.url,
+          label: p.label,
+          sub: p.sub || '',
+          productCode: p.productCode || '',
+          price: p.price || '',
+          isCustom: !!p.isCustom
+        }));
+
+        if (outOfSyncDefaults.length > 0) {
+          outOfSyncDefaults.forEach(async (photo) => {
+            try {
+              await setDoc(doc(db, 'gallery', photo.id), photo);
+            } catch (err) {
+              console.warn("Seeding or updating default gallery item: ", err);
+            }
+          });
+          // Update the local list with correct items
+          outOfSyncDefaults.forEach(photo => {
+            const idx = items.findIndex(item => String(item.id) === String(photo.id));
+            if (idx > -1) {
+              items[idx] = photo;
+            } else {
+              items.push(photo);
+            }
+          });
+        }
+
         items.sort((a, b) => b.id.localeCompare(a.id));
         setGalleryPhotos(items);
         localStorage.setItem('ht_gallery_photos', JSON.stringify(items));
@@ -384,9 +531,9 @@ export default function App() {
             url: photo.url,
             label: photo.label,
             sub: photo.sub || '',
-            productCode: '',
-            price: '',
-            isCustom: false
+            productCode: photo.productCode || '',
+            price: photo.price || '',
+            isCustom: !!photo.isCustom
           }));
           setGalleryPhotos(formattedList);
         }
@@ -396,6 +543,65 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'gallery');
     });
     return () => unsub();
+  }, []);
+
+  // 5. Synchronize Custom Operational Collections from Firestore
+  useEffect(() => {
+    // A. Requests Proposal Queue
+    const unsubReq = onSnapshot(collection(db, 'requests'), (snapshot) => {
+      const items: any[] = [];
+      snapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() });
+      });
+      items.sort((a, b) => b.id.localeCompare(a.id));
+      setRequestsList(items);
+      localStorage.setItem('ht_requests', JSON.stringify(items));
+    }, (error) => {
+      console.warn("Requests live sync fallback: ", error);
+    });
+
+    // B. Short Video Catalog
+    const unsubVid = onSnapshot(collection(db, 'videos'), (snapshot) => {
+      const items: any[] = [];
+      snapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() });
+      });
+      items.sort((a, b) => b.id.localeCompare(a.id));
+      setGalleryVideos(items);
+      localStorage.setItem('ht_videos', JSON.stringify(items));
+    }, (error) => {
+      console.warn("Videos live sync fallback: ", error);
+    });
+
+    // C. Live Settings Control Panel
+    const unsubConf = onSnapshot(collection(db, 'app_config'), (snapshot) => {
+      snapshot.forEach((docSnap) => {
+        const id = docSnap.id;
+        const data = docSnap.data();
+        if (id === 'hero_photo') {
+          if (data.url) {
+            setOpeningPhotoUrl(data.url);
+            localStorage.setItem('ht_opening_photo', data.url);
+          }
+        } else if (id === 'live_embed') {
+          if (data.url) {
+            setLiveEmbedUrl(data.url);
+            localStorage.setItem('ht_live_embed', data.url);
+          }
+        } else if (id === 'contacts') {
+          setContacts(data);
+          localStorage.setItem('ht_contacts', JSON.stringify(data));
+        }
+      });
+    }, (error) => {
+      console.warn("App config live sync fallback: ", error);
+    });
+
+    return () => {
+      unsubReq();
+      unsubVid();
+      unsubConf();
+    };
   }, []);
 
   // Save to local storage triggers
@@ -456,6 +662,172 @@ export default function App() {
     const updated = [deal, ...dealsList];
     setDealsList(updated);
     localStorage.setItem('ht_deals', JSON.stringify(updated));
+  };
+
+  // Operational Request handlers (Manager authorization pipeline)
+  const handleCreateRequest = async (type: string, payload: any, note: string) => {
+    const id = 'req_' + Date.now();
+    const newRequest = {
+      id,
+      type,
+      payload: typeof payload === 'object' ? JSON.stringify(payload) : payload,
+      note,
+      status: 'pending' as const,
+      submittedAt: new Date().toISOString(),
+      managerComment: ''
+    };
+
+    // Update locally
+    const updated = [newRequest, ...requestsList];
+    setRequestsList(updated);
+    localStorage.setItem('ht_requests', JSON.stringify(updated));
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'requests', id), newRequest);
+    } catch (err) {
+      console.warn("Requests cloud write notice (offline sync): ", err);
+    }
+  };
+
+  const handleApproveRequest = async (id: string) => {
+    if (id === 'auto_execute') return; // bypassing for instantaneous manager direct changes
+
+    const reqToApprove = requestsList.find(r => r.id === id);
+    if (!reqToApprove) return;
+
+    let parsedPayload = reqToApprove.payload;
+    try {
+      if (typeof parsedPayload === 'string') {
+        parsedPayload = JSON.parse(parsedPayload);
+      }
+    } catch (e) {
+      console.warn("Could not parse payload as JSON, applying raw string.", e);
+    }
+
+    // Apply the operational data parameters live based on category target
+    if (reqToApprove.type === 'deal') {
+      const dealObj = {
+        id: 'deal_' + Date.now(),
+        title: parsedPayload.title || 'Special authorized promo',
+        origPrice: parsedPayload.origPrice || '₦0',
+        salePrice: parsedPayload.salePrice || '₦0',
+        badge: parsedPayload.badge || 'FLASH DEAL',
+        desc: parsedPayload.desc || 'Manager permitted showroom special clearance slot'
+      };
+      handleAddCustomDeal(dealObj);
+    } else if (reqToApprove.type === 'bank') {
+      const bankObj = {
+        bank: parsedPayload.bank || 'Access Bank PLC',
+        accountNumber: parsedPayload.accountNumber || '',
+        accountName: parsedPayload.accountName || ''
+      };
+      handleUpdateBankAccount(bankObj);
+    } else if (reqToApprove.type === 'contacts') {
+      const updatedContacts = {
+        sales: parsedPayload.sales || contacts.sales,
+        inventory: parsedPayload.inventory || contacts.inventory,
+        general: contacts.general,
+        gm: contacts.gm
+      };
+      handleUpdateContacts(updatedContacts);
+    } else if (reqToApprove.type === 'hero_cover') {
+      handleUpdateOpeningPhoto(parsedPayload.url || '');
+    } else if (reqToApprove.type === 'gallery_collage') {
+      // Build a gallery item from collage metadata
+      const newCollagePhoto = {
+        id: parsedPayload.id || 'col_' + Date.now(),
+        url: parsedPayload.url || '',
+        label: parsedPayload.label || 'Interactive Collage',
+        sub: parsedPayload.sub || '',
+        productCode: parsedPayload.productCode || '',
+        price: parsedPayload.price || '',
+        isCustom: true
+      };
+      saveGalleryPhotosToStorage([newCollagePhoto, ...galleryPhotos]);
+    }
+
+    // Mark status as 'approved'
+    const updatedRequests = requestsList.map(r => r.id === id ? { ...r, status: 'approved' as const } : r);
+    setRequestsList(updatedRequests);
+    localStorage.setItem('ht_requests', JSON.stringify(updatedRequests));
+
+    try {
+      await setDoc(doc(db, 'requests', id), { ...reqToApprove, status: 'approved' as const });
+    } catch (err) {
+      console.warn("Requests cloud updates failed (offline mode):", err);
+    }
+  };
+
+  const handleRejectRequest = async (id: string, notes: string) => {
+    const updatedRequests = requestsList.map(r => r.id === id ? { ...r, status: 'rejected' as const, managerComment: notes } : r);
+    setRequestsList(updatedRequests);
+    localStorage.setItem('ht_requests', JSON.stringify(updatedRequests));
+
+    const reqToReject = requestsList.find(r => r.id === id);
+    if (reqToReject) {
+      try {
+        await setDoc(doc(db, 'requests', id), { ...reqToReject, status: 'rejected' as const, managerComment: notes });
+      } catch (err) {
+        console.warn("Requests cloud reject notice:", err);
+      }
+    }
+  };
+
+  const handleUpdateOpeningPhoto = async (url: string) => {
+    setOpeningPhotoUrl(url);
+    localStorage.setItem('ht_opening_photo', url);
+    try {
+      await setDoc(doc(db, 'app_config', 'hero_photo'), { url });
+    } catch (err) {
+      console.warn("Hero cover cloud update offline fallback: ", err);
+    }
+  };
+
+  const handleUpdateLiveEmbedUrl = async (url: string) => {
+    setLiveEmbedUrl(url);
+    localStorage.setItem('ht_live_embed', url);
+    try {
+      await setDoc(doc(db, 'app_config', 'live_embed'), { url });
+    } catch (err) {
+      console.warn("Live stream embed url cloud update offline fallback: ", err);
+    }
+  };
+
+  const handleUpdateContacts = async (newContacts: typeof contacts) => {
+    setContacts(newContacts);
+    localStorage.setItem('ht_contacts', JSON.stringify(newContacts));
+    try {
+      await setDoc(doc(db, 'app_config', 'contacts'), newContacts);
+    } catch (err) {
+      console.warn("Contacts configurations cloud update offline fallback: ", err);
+    }
+  };
+
+  const handleAddVideo = async (vid: { url: string; title: string; desc?: string }) => {
+    const id = 'vid_' + Date.now();
+    const newVideo = { id, ...vid };
+    const updated = [newVideo, ...galleryVideos];
+    setGalleryVideos(updated);
+    localStorage.setItem('ht_videos', JSON.stringify(updated));
+
+    try {
+      await setDoc(doc(db, 'videos', id), newVideo);
+    } catch (err) {
+      console.warn("Videos cloud write fallback: ", err);
+    }
+  };
+
+  const handleRemoveVideo = async (id: string) => {
+    const updated = galleryVideos.filter(v => v.id !== id);
+    setGalleryVideos(updated);
+    localStorage.setItem('ht_videos', JSON.stringify(updated));
+
+    try {
+      await deleteDoc(doc(db, 'videos', id));
+    } catch (err) {
+      console.warn("Videos cloud delete fallback: ", err);
+    }
   };
 
   // Add to standard cart
@@ -554,7 +926,7 @@ Name: ${quickName}
 Phone: ${quickPhone}
 Message: ${quickMessageText}`;
 
-    const num = targetRole === 'sales' ? WA_SALES : WA_INVENTORY;
+    const num = targetRole === 'sales' ? contacts.sales : contacts.inventory;
     openWhatsAppLink(num, formatted);
     setQuickMessageText('');
   };
@@ -757,7 +1129,7 @@ Message: ${quickMessageText}`;
       }).catch(err => console.error("Sheets sales syncing error:", err));
     }
 
-    openWhatsAppLink(WA_SALES, text);
+    openWhatsAppLink(contacts.sales, text);
   };
 
   return (
@@ -799,9 +1171,10 @@ Message: ${quickMessageText}`;
 
           <div className="my-6">
             <img 
-              src="https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=400&q=80" 
+              src={openingPhotoUrl} 
               alt="Showroom" 
               className="w-full max-h-[160px] object-cover rounded-xl filter border border-zinc-800 shadow-md brightness-75 scale-95 hover:scale-100 transition-transform duration-300"
+              referrerPolicy="no-referrer"
             />
           </div>
 
@@ -1020,23 +1393,51 @@ Message: ${quickMessageText}`;
                 if (!file || !selectedItem) return;
 
                 const reader = new FileReader();
-                reader.onloadend = () => {
+                reader.onloadend = async () => {
                   const dataUrl = reader.result as string;
-                  const newPhoto = {
-                    id: 'gal_' + Date.now(),
-                    url: dataUrl,
-                    label: selectedItem.name,
-                    sub: selectedItem.spec,
-                    productCode: selectedItem.code,
-                    price: selectedItem.price,
-                    isCustom: true
-                  };
-                  const nextPhotos = [newPhoto, ...galleryPhotos];
-                  saveGalleryPhotosToStorage(nextPhotos);
+                  try {
+                    const uploadRes = await fetch('/api/upload', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ filename: file.name, base64Data: dataUrl })
+                    });
+                    if (!uploadRes.ok) throw new Error("Upload failed");
+                    const uploadData = await uploadRes.json();
+                    const finalUrl = uploadData.url;
 
-                  // Update product imageCache
-                  handleUpdateImageCache(selectedItem.idVal.toString(), dataUrl);
-                  alert(`📤 Photo successfully uploaded & bound to Product Code [${selectedItem.code}]!`);
+                    const newPhoto = {
+                      id: 'gal_' + Date.now(),
+                      url: finalUrl,
+                      label: selectedItem.name,
+                      sub: selectedItem.spec,
+                      productCode: selectedItem.code,
+                      price: selectedItem.price,
+                      isCustom: true
+                    };
+                    const nextPhotos = [newPhoto, ...galleryPhotos];
+                    saveGalleryPhotosToStorage(nextPhotos);
+
+                    // Update product imageCache
+                    handleUpdateImageCache(selectedItem.idVal.toString(), finalUrl);
+                    alert(`📤 Photo successfully uploaded & bound to Product Code [${selectedItem.code}]!`);
+                  } catch (err) {
+                    console.error("Gallery cloud-free photo file saving fell back to local base64 storage:", err);
+                    const newPhoto = {
+                      id: 'gal_' + Date.now(),
+                      url: dataUrl,
+                      label: selectedItem.name,
+                      sub: selectedItem.spec,
+                      productCode: selectedItem.code,
+                      price: selectedItem.price,
+                      isCustom: true
+                    };
+                    const nextPhotos = [newPhoto, ...galleryPhotos];
+                    saveGalleryPhotosToStorage(nextPhotos);
+
+                    // Update product imageCache
+                    handleUpdateImageCache(selectedItem.idVal.toString(), dataUrl);
+                    alert(`📤 Photo successfully saved (local memory localstorage fallback) & bound to Product Code [${selectedItem.code}]!`);
+                  }
                 };
                 reader.readAsDataURL(file);
               };
@@ -1071,101 +1472,6 @@ Message: ${quickMessageText}`;
                   <div className="text-center">
                     <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Workspace Portfolios</h2>
                     <p className="text-md font-serif font-bold text-zinc-300">Authorized Distribution Exhibition</p>
-                  </div>
-
-                  {/* MEDIA REGISTER PANEL */}
-                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3.5 text-left">
-                    <div className="border-b border-[#262626] pb-2 flex justify-between items-center">
-                      <span className="text-[11px] uppercase font-bold text-zinc-300 tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#F5C518]" />
-                        Register Product Photos
-                      </span>
-                      <span className="text-[9px] bg-amber-500/10 px-2 py-0.5 rounded text-[#F5C518] font-mono font-bold uppercase font-sans">
-                        Stock Editor
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 font-sans">
-                      {/* Search and Select Row */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1">
-                          <Search className="w-3 h-3 text-zinc-500" />
-                          Step 1: Search & Choose Product Code
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="Type code or name (e.g. HP-853, Choice...)"
-                            className="flex-1 bg-[#0a0a0a] border border-[#262626] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-zinc-500"
-                            value={gallerySearchQuery}
-                            onChange={(e) => setGallerySearchQuery(e.target.value)}
-                          />
-                          {gallerySearchQuery && (
-                            <button
-                              onClick={() => setGallerySearchQuery('')}
-                              className="px-2 text-zinc-500 hover:text-zinc-300 text-xs font-bold font-sans"
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Compact scrollable picker */}
-                        <div className="max-h-24 overflow-y-auto bg-black/40 border border-[#262626] rounded-lg p-1.5 scrollbar-thin space-y-1">
-                          {filteredCodes.length === 0 ? (
-                            <p className="text-[10px] text-zinc-600 p-1 text-center italic">No matching products found</p>
-                          ) : (
-                            filteredCodes.slice(0, 15).map(item => {
-                              const isSel = gallerySelectedCode === item.code;
-                              return (
-                                <button
-                                  key={item.code}
-                                  onClick={() => setGallerySelectedCode(item.code)}
-                                  className={`w-full text-left px-2 py-1 rounded text-[10px] transition truncate flex justify-between items-center ${
-                                    isSel 
-                                      ? 'bg-[#F5C518] text-[#0a0a0a] font-bold' 
-                                      : 'hover:bg-zinc-800 text-zinc-400'
-                                  }`}
-                                >
-                                  <span className="font-mono">{item.code}</span>
-                                  <span className="opacity-80 text-[9px] truncate max-w-[200px]">{item.name}</span>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Display Selected Specs and Action Buttons */}
-                      {selectedItem ? (
-                        <div className="bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg space-y-3.5">
-                          <div className="space-y-1">
-                            <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Currently Selected Product</span>
-                            <h4 className="text-xs font-bold text-zinc-200">{selectedItem.name}</h4>
-                            <p className="text-[10px] text-[#F5C518] font-mono font-bold">{selectedItem.code} · Price: {selectedItem.price}</p>
-                            <p className="text-[9px] text-zinc-500 italic mt-0.5 line-clamp-1">{selectedItem.spec}</p>
-                          </div>
-
-                          <div className="pt-2 border-t border-zinc-900">
-                            {/* Manual File Upload */}
-                            <label className="w-full py-2 px-3 bg-[#1a1a1a] border border-[#262626] hover:bg-zinc-800 hover:border-zinc-700 text-[10px] text-zinc-300 font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-sm text-center transition">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>Upload Photo</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                className="hidden" 
-                                onChange={handleFileUpload} 
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center p-4 rounded-lg bg-black/20 border border-dashed border-[#262626]">
-                          <p className="text-[10px] text-zinc-500">Pick a Product Code from the list above to upload custom product photos instantly.</p>
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* GALLERY GALLERY FEED SUB-TABS */}
@@ -1207,18 +1513,62 @@ Message: ${quickMessageText}`;
                         // Find original product object so if the card is clicked, we can open details!
                         const matchedProduct = allProductCodes.find(p => p.code === img.productCode)?.origin;
 
+                        const isCollageLayout = img.url?.startsWith('collage:');
+                        let collageLayoutType = 'dual';
+                        let collageLayoutImages: string[] = [];
+                        if (isCollageLayout) {
+                          const parts = img.url.split(':');
+                          collageLayoutType = parts[1] || 'dual';
+                          collageLayoutImages = (parts[2] || '').split(';');
+                        }
+
                         return (
                           <div 
                             key={img.id} 
                             className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-md relative group hover:border-zinc-700 transition"
                           >
-                            <img 
-                              src={img.url} 
-                              alt={img.label} 
-                              className="w-full aspect-video object-cover filter brightness-[0.82]"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                            />
+                            {isCollageLayout ? (
+                              <div className={`w-full aspect-video p-1.5 gap-1 bg-black/40 ${
+                                collageLayoutType === 'dual' ? 'grid grid-cols-2' :
+                                collageLayoutType === 'triple' ? 'grid grid-cols-3' :
+                                'grid grid-cols-2 grid-rows-2'
+                              }`}>
+                                {collageLayoutImages.map((collageUrl, indexU) => {
+                                  const isMainLeftFocus = collageLayoutType === 'triple' && indexU === 0;
+                                  return (
+                                    <div 
+                                      key={indexU} 
+                                      className={`rounded overflow-hidden border border-zinc-900/40 bg-zinc-950 flex relative ${
+                                        isMainLeftFocus ? 'col-span-2 row-span-2' : ''
+                                      }`}
+                                    >
+                                      <img 
+                                        src={collageUrl} 
+                                        alt="" 
+                                        className="w-full h-full object-cover filter brightness-[0.85]" 
+                                        loading="lazy" 
+                                        referrerPolicy="no-referrer" 
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <img 
+                                src={img.url} 
+                                alt={img.label} 
+                                className="w-full aspect-video object-cover filter brightness-[0.82]"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  if (matchedProduct) {
+                                    e.currentTarget.src = getDefaultProductImage(matchedProduct);
+                                  } else {
+                                    e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
+                                  }
+                                }}
+                              />
+                            )}
 
                             {/* Trash Button for custom photos */}
                             {isCustom && (
@@ -1342,9 +1692,31 @@ Message: ${quickMessageText}`;
             {currentRoom === 'channels' && (
               <div className="p-4 space-y-4">
                 <div className="text-center">
-                  <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Office Hotlines</h2>
+                  <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Office Hotlines & Live Stream</h2>
                   <p className="text-md font-serif text-zinc-300 font-bold">Authorized Connect Channels</p>
                 </div>
+
+                {/* LIVE WEBCAST STREAMING WIDGET */}
+                {liveEmbedUrl && !liveEmbedUrl.includes('UC...') && (
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3 font-sans text-left">
+                    <h3 className="text-xs text-[#F5C518] font-bold uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
+                      <span className="w-2 h-2 bg-[#CC0000] rounded-full"></span>
+                      <span>Showroom Live Stream Broadcast</span>
+                    </h3>
+                    <div className="aspect-video w-full rounded-lg overflow-hidden border border-zinc-805 bg-black">
+                      <iframe
+                        src={liveEmbedUrl}
+                        title="Live Video Stream"
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      ></iframe>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 leading-normal block">
+                      Connect live directly with Warri, Delta State Hub to watch diagnostic walkarounds.
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-3 font-serif">
                   <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
@@ -1356,7 +1728,7 @@ Message: ${quickMessageText}`;
                           <p className="text-[10px] text-zinc-500">Prices inquiries & orders</p>
                         </div>
                         <button 
-                          onClick={() => openWhatsAppLink(WA_SALES, "Hello Sales Team! I would like to inquire about current laptops prices.")}
+                          onClick={() => openWhatsAppLink(contacts.sales, "Hello Sales Team! I would like to inquire about current laptops prices.")}
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px] uppercase transition-colors"
                         >
                           Connect
@@ -1369,7 +1741,7 @@ Message: ${quickMessageText}`;
                           <p className="text-[10px] text-zinc-500">Stock availability lists & logistics</p>
                         </div>
                         <button 
-                          onClick={() => openWhatsAppLink(WA_INVENTORY, "Hello Stock Coordinator, I would like to check available stock in your showroom.")}
+                          onClick={() => openWhatsAppLink(contacts.inventory, "Hello Stock Coordinator, I would like to check available stock in your showroom.")}
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px] uppercase transition-colors"
                         >
                           Check
@@ -1382,7 +1754,7 @@ Message: ${quickMessageText}`;
                           <p className="text-[10px] text-zinc-500">Warranty, repairs, and support</p>
                         </div>
                         <button 
-                          onClick={() => openWhatsAppLink(WA_GEN, "Hello Support Desk, I have a repair or warranty service inquiry.")}
+                          onClick={() => openWhatsAppLink(contacts.general, "Hello Support Desk, I have a repair or warranty service inquiry.")}
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px] uppercase transition-colors"
                         >
                           Details
@@ -1571,7 +1943,7 @@ Message: ${quickMessageText}`;
                         <button 
                           onClick={() => {
                             const linkText = `Hello Sales! I am interested in claiming the posted promo deal: "${item.title}" on sale for ${item.salePrice}.`;
-                            openWhatsAppLink(WA_SALES, linkText);
+                            openWhatsAppLink(contacts.sales, linkText);
                           }}
                           className="w-full mt-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded text-[10px] font-bold uppercase transition"
                         >
@@ -2080,6 +2452,11 @@ Message: ${quickMessageText}`;
                 mgrStatus={mgrStatus}
                 bankAccount={bankAccount}
                 spreadsheetId={spreadsheetId}
+                openingPhotoUrl={openingPhotoUrl}
+                liveEmbedUrl={liveEmbedUrl}
+                contacts={contacts}
+                requests={requestsList}
+                galleryVideos={galleryVideos}
                 onUpdateProducts={handleUpdateProducts}
                 onUpdateSolarProducts={handleUpdateSolarProducts}
                 onUpdateRepairs={handleUpdateRepairs}
@@ -2092,6 +2469,16 @@ Message: ${quickMessageText}`;
                 onUpdateBankAccount={handleUpdateBankAccount}
                 onAddCustomDeal={handleAddCustomDeal}
                 onUpdateSpreadsheetId={handleUpdateSpreadsheetId}
+                onUpdateOpeningPhoto={handleUpdateOpeningPhoto}
+                onUpdateLiveEmbedUrl={handleUpdateLiveEmbedUrl}
+                onUpdateContacts={handleUpdateContacts}
+                onCreateRequest={handleCreateRequest}
+                onApproveRequest={handleApproveRequest}
+                onRejectRequest={handleRejectRequest}
+                onAddVideo={handleAddVideo}
+                onRemoveVideo={handleRemoveVideo}
+                galleryPhotos={galleryPhotos}
+                onUpdateGalleryPhotos={saveGalleryPhotosToStorage}
               />
             )}
 
@@ -2160,7 +2547,7 @@ Message: ${quickMessageText}`;
         }}
         imageCache={imageCache}
         onUpdateImageCache={handleUpdateImageCache}
-        onTriggerEnquiry={(msg) => openWhatsAppLink(WA_SALES, msg)}
+        onTriggerEnquiry={(msg) => openWhatsAppLink(contacts.sales, msg)}
       />
 
     </div>

@@ -1,0 +1,498 @@
+{
+  "1781587798853_1000044556.jpg": {
+    "file": "1781587798853_1000044556.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "Envy 15 X360",
+    "visualFeatures": "A collection of images showcasing a silver convertible laptop from different angles, including an opened front view, the back lid with the minimalist slash logo, and a 360-degree tablet mode.",
+    "view": "unknown"
+  },
+  "1781587796681_1000044573.jpg": {
+    "file": "1781587796681_1000044573.jpg",
+    "brand": "HP",
+    "category": "desktop",
+    "visibleModel": "unknown",
+    "visualFeatures": "A black all-in-one computer shown from an angled rear view on a sleek silver stand, complete with a matching black keyboard and mouse.",
+    "view": "side"
+  },
+  "1781587797176_1000044566.jpg": {
+    "file": "1781587797176_1000044566.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "LaserJet Enterprise M608",
+    "visualFeatures": "White, boxy multi-drawer enterprise printer with a tilted color touchscreen display and circular HP logo on the front panel.",
+    "view": "front"
+  },
+  "1781587799325_1000044554.jpg": {
+    "file": "1781587799325_1000044554.jpg",
+    "brand": "HP",
+    "category": "desktop",
+    "visibleModel": "unknown",
+    "visualFeatures": "White all-in-one computer viewed from the back, showing a central pedestal stand and various connection ports.",
+    "view": "unknown"
+  },
+  "1781587797863_1000044562.jpg": {
+    "file": "1781587797863_1000044562.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "unknown",
+    "visualFeatures": "Silver metallic laptop with a backlit chiclet keyboard, large trackpad, and a central HP logo on the lid.",
+    "view": "front"
+  },
+  "1781587801241_1000044550.jpg": {
+    "file": "1781587801241_1000044550.jpg",
+    "brand": "HP",
+    "category": "desktop",
+    "visibleModel": "",
+    "visualFeatures": "A white all-in-one desktop computer featuring a thin-bezel screen, a pedestal stand, and a matching wired keyboard and mouse.",
+    "view": "front"
+  },
+  "1781587805280_1000044529.jpg": {
+    "file": "1781587805280_1000044529.jpg",
+    "brand": "Generic",
+    "category": "battery",
+    "visibleModel": "Lithium ION Battery",
+    "visualFeatures": "A black, rectangular lithium-ion battery unit featuring a metallic carrying handle on top and a high-current connector cable attached to the side.",
+    "view": "side"
+  },
+  "1781587799946_1000044552.jpg": {
+    "file": "1781587799946_1000044552.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "unknown",
+    "visualFeatures": "A light gold metallic laptop with an open screen showing a Windows 10 start menu.",
+    "view": "front"
+  },
+  "1781587800441_1000044548.jpg": {
+    "file": "1781587800441_1000044548.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "unknown",
+    "visualFeatures": "A grey, slim laptop shown from a side profile view exposing various connectivity ports and an SD card slot.",
+    "view": "side"
+  },
+  "1781587801872_1000044546.jpg": {
+    "file": "1781587801872_1000044546.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "Victus",
+    "visualFeatures": "A dark blue gaming laptop featuring a full keyboard, trackpad, and the distinct V-shaped Victus logo on the lid.",
+    "view": "front"
+  },
+  "1781587803519_1000044544.jpg": {
+    "file": "1781587803519_1000044544.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "unknown",
+    "visualFeatures": "A silver flip laptop shown from the front with a Windows 11 interface displayed on the screen.",
+    "view": "front"
+  },
+  "1781587804128_1000044540.jpg": {
+    "file": "1781587804128_1000044540.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "OmniBook 5 Flip 2-in-1",
+    "visualFeatures": "A silver-colored convertible laptop with a metallic finish, an open screen display, and a keyboard.",
+    "view": "front"
+  },
+  "1781587804756_1000044538.jpg": {
+    "file": "1781587804756_1000044538.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "HP 240 G8",
+    "visualFeatures": "A dark grey laptop with a visible HP logo on the metallic lid, shown in a partially open configuration.",
+    "view": "side"
+  },
+  "1781587806757_1000044536.jpg": {
+    "file": "1781587806757_1000044536.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "Pavilion x360",
+    "visualFeatures": "Silver 2-in-1 convertible laptop showing its keyboard, trackpad, and screen in an open orientation.",
+    "view": "front"
+  },
+  "1781587807392_1000044534.jpg": {
+    "file": "1781587807392_1000044534.jpg",
+    "brand": "Ultramax",
+    "category": "battery",
+    "visibleModel": "Li200-12",
+    "visualFeatures": "A large rectangular black lithium iron phosphate (LiFePO4) battery with positive and negative terminal posts on the top surface and a large white information label on the side.",
+    "view": "side"
+  },
+  "1781587807865_1000044528.jpg": {
+    "file": "1781587807865_1000044528.jpg",
+    "brand": "Felicitysolar",
+    "category": "inverter",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white wall-mounted unit with a circular black interface, an LCD screen, and four green connection indicators at the base.",
+    "view": "front"
+  },
+  "1781587808698_1000044525.jpg": {
+    "file": "1781587808698_1000044525.jpg",
+    "brand": "HP",
+    "category": "laptop",
+    "visibleModel": "7Z6T2EA - HP PAVILLION 14",
+    "visualFeatures": "A silver-colored HP Pavilion laptop with a metallic finish, thin bezels, and a Windows 11 desktop interface.",
+    "view": "front"
+  },
+  "1781587809340_1000044523.jpg": {
+    "file": "1781587809340_1000044523.jpg",
+    "brand": "Felicitysolar",
+    "category": "controller",
+    "visibleModel": "MPPT SOLAR CHARGE CONTROLLER",
+    "visualFeatures": "A white and black rectangular wall-mounted MPPT solar charge controller with a central LCD screen and front control buttons.",
+    "view": "front"
+  },
+  "1781587809865_1000044521.jpg": {
+    "file": "1781587809865_1000044521.jpg",
+    "brand": "Growatt",
+    "category": "inverter",
+    "visibleModel": "Growatt",
+    "visualFeatures": "A sleek, wall-mounted power inverter featuring a white front panel, a black side section with a digital LCD display, and ventilation grilles.",
+    "view": "front"
+  },
+  "1781587810521_1000044519.jpg": {
+    "file": "1781587810521_1000044519.jpg",
+    "brand": "Felicitysolar",
+    "category": "inverter",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white wall-mounted power inverter featuring a central black panel with an LCD display, status indicator lights, and navigation buttons.",
+    "view": "front"
+  },
+  "1781587811166_1000044517.jpg": {
+    "file": "1781587811166_1000044517.jpg",
+    "brand": "Felicitysolar",
+    "category": "inverter",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white wall-mounted unit with a prominent central black panel containing an LCD screen, indicator lights, and navigation buttons.",
+    "view": "front"
+  },
+  "1781587811685_1000044515.jpg": {
+    "file": "1781587811685_1000044515.jpg",
+    "brand": "CWORTH ENERGY",
+    "category": "inverter",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white wall-mounted power inverter with a central circular display, blue accent branding, and side air vents.",
+    "view": "side"
+  },
+  "1781587812171_1000044513.jpg": {
+    "file": "1781587812171_1000044513.jpg",
+    "brand": "CWORTH ENERGY",
+    "category": "inverter",
+    "visibleModel": "Hybrid Solar Inverter",
+    "visualFeatures": "A wall-mounted white and blue industrial box featuring a digital display panel with control buttons and status indicators.",
+    "view": "front"
+  },
+  "1781587812711_1000044511.jpg": {
+    "file": "1781587812711_1000044511.jpg",
+    "brand": "CWORTH ENERGY",
+    "category": "inverter",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white, wall-mounted inverter unit with a prominent circular digital display panel on the front and cooling vents on the right side.",
+    "view": "side"
+  },
+  "1781587813431_1000044509.jpg": {
+    "file": "1781587813431_1000044509.jpg",
+    "brand": "Growatt",
+    "category": "inverter",
+    "visibleModel": "6KW",
+    "visualFeatures": "A white wall-mounted off-grid power inverter featuring a sleek central circular interface with an LCD screen and control buttons.",
+    "view": "front"
+  },
+  "1781587814328_1000044503.jpg": {
+    "file": "1781587814328_1000044503.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "LaserJet MFP 179fnw",
+    "visualFeatures": "A white laser multifunction printer featuring a flatbed scanner, document feeder, and front-loading paper tray.",
+    "view": "front"
+  },
+  "1781587814669_1000044501.jpg": {
+    "file": "1781587814669_1000044501.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white compact inkjet printer shown from both front and angle views with a document printed in the output tray.",
+    "view": "front"
+  },
+  "1781587815813_1000044496.jpg": {
+    "file": "1781587815813_1000044496.jpg",
+    "brand": "Choice",
+    "category": "inverter",
+    "visibleModel": "Choice solar",
+    "visualFeatures": "A stack of boxed power inverters, each featuring a picture of the unit, a digital display, and a woman holding a small unit.",
+    "view": "front"
+  },
+  "1781587816747_1000044492.jpg": {
+    "file": "1781587816747_1000044492.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "LaserJet Pro M401",
+    "visualFeatures": "A white, boxy desktop laser printer with a top paper output tray and a small control screen on the right side.",
+    "view": "front"
+  },
+  "1781587817699_1000044490.jpg": {
+    "file": "1781587817699_1000044490.jpg",
+    "brand": "Choice",
+    "category": "inverter",
+    "visibleModel": "Choice Solar",
+    "visualFeatures": "A white and black wall-mountable pure sine wave inverter with a digital display and vertical status LED indicator lights.",
+    "view": "front"
+  },
+  "1781587818596_1000044476.jpg": {
+    "file": "1781587818596_1000044476.jpg",
+    "brand": "Deka",
+    "category": "battery",
+    "visibleModel": "Deka Ultimate",
+    "visualFeatures": "A black lead-acid storage battery featuring a carry handle, a red positive terminal cap, and a prominent Deka Ultimate brand label.",
+    "view": "front"
+  },
+  "1781587818915_1000044485.jpg": {
+    "file": "1781587818915_1000044485.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "Two white and black all-in-one inkjet printers with front paper trays and a top-mounted scanner unit.",
+    "view": "front"
+  },
+  "1781587819903_1000044474.jpg": {
+    "file": "1781587819903_1000044474.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "Smart Tank 515",
+    "visualFeatures": "A grey, boxy inkjet printer with an integrated ink tank system visible on the front left side.",
+    "view": "front"
+  },
+  "1781587820219_1000044480.jpg": {
+    "file": "1781587820219_1000044480.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white and black multi-function office printer with a document feeder on top, a front-facing screen, and a paper output tray.",
+    "view": "front"
+  },
+  "1781587820900_1000044472.jpg": {
+    "file": "1781587820900_1000044472.jpg",
+    "brand": "Felicitysolar",
+    "category": "inverter",
+    "visibleModel": "24V",
+    "visualFeatures": "A white power inverter box featuring a cooling fan, battery terminals, PV input ports, and connection terminal blocks.",
+    "view": "side"
+  },
+  "1781587821978_1000044470.jpg": {
+    "file": "1781587821978_1000044470.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "Smart Tank 515",
+    "visualFeatures": "A white and black inkjet printer with a red top lid, prominent external ink reservoirs, and a front output tray.",
+    "view": "front"
+  },
+  "1781587822635_1000044468.jpg": {
+    "file": "1781587822635_1000044468.jpg",
+    "brand": "Generic",
+    "category": "inverter",
+    "visibleModel": "CHNT NXB-63",
+    "visualFeatures": "A metal-cased power inverter featuring red and black battery terminals, a large cooling fan, and AC input/output circuit breakers.",
+    "view": "front"
+  },
+  "1781587822924_1000044465.jpg": {
+    "file": "1781587822924_1000044465.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A grey inkjet tank-style printer with a front-loading paper tray and visible ink reservoirs.",
+    "view": "front"
+  },
+  "1781587823229_1000044462.jpg": {
+    "file": "1781587823229_1000044462.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A boxy, black inkjet printer with an integrated ink tank system visible on the front and a blue paper tray/lid accent.",
+    "view": "side"
+  },
+  "1781587823760_1000044460.jpg": {
+    "file": "1781587823760_1000044460.jpg",
+    "brand": "Felicity",
+    "category": "inverter",
+    "visibleModel": "Pure Sine Wave Combined Inverter & Charger",
+    "visualFeatures": "A white wall-mounted unit with a vertical black central panel containing an LCD screen and control buttons.",
+    "view": "front"
+  },
+  "1781587824577_1000044458.jpg": {
+    "file": "1781587824577_1000044458.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "Smart Tank 515",
+    "visualFeatures": "A black all-in-one inkjet printer featuring a front-facing ink tank system and a top-loading paper tray.",
+    "view": "front"
+  },
+  "1781587824910_1000044455.jpg": {
+    "file": "1781587824910_1000044455.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "An all-in-one inkjet printer with a visible integrated ink tank system on the right side and a flatbed scanner on top.",
+    "view": "front"
+  },
+  "1781587825400_1000044453.jpg": {
+    "file": "1781587825400_1000044453.jpg",
+    "brand": "inaeko",
+    "category": "inverter",
+    "visibleModel": "1.2kVA",
+    "visualFeatures": "A portable black power station unit with an integrated handle, front-facing AC/DC output ports, and a digital display screen.",
+    "view": "front"
+  },
+  "1781587825675_1000044450.jpg": {
+    "file": "1781587825675_1000044450.jpg",
+    "brand": "Generic",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A compact, black tower-style Uninterruptible Power Supply (UPS) featuring two rear-facing AC power outlets and a manual reset button.",
+    "view": "side"
+  },
+  "1781587826391_1000044448.jpg": {
+    "file": "1781587826391_1000044448.jpg",
+    "brand": "Energenie",
+    "category": "ups",
+    "visibleModel": "EG-UPS-031",
+    "visualFeatures": "A black compact tower UPS device with a front power button and LED indicators, featuring a power cable with a Type F (Schuko) plug.",
+    "view": "side"
+  },
+  "1781587827083_1000044446.jpg": {
+    "file": "1781587827083_1000044446.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "Uninterruptible Power Supply",
+    "visualFeatures": "A tall, black tower-style UPS unit featuring a front-facing control panel with an LCD display and physical buttons.",
+    "view": "front"
+  },
+  "1781587827992_1000044444.jpg": {
+    "file": "1781587827992_1000044444.jpg",
+    "brand": "Blue Gate",
+    "category": "stabilizer",
+    "visibleModel": "BG 2000VA",
+    "visualFeatures": "A black automatic voltage regulator unit featuring two analog gauges, a power rocker switch, and indicator lights on the front panel.",
+    "view": "front"
+  },
+  "1781587828716_1000044442.jpg": {
+    "file": "1781587828716_1000044442.jpg",
+    "brand": "Blue Gate",
+    "category": "battery",
+    "visibleModel": "6FM9",
+    "visualFeatures": "A black sealed rechargeable lead-acid battery with a label listing specifications like 12V9AH/20HR.",
+    "view": "front"
+  },
+  "1781587829245_1000044440.jpg": {
+    "file": "1781587829245_1000044440.jpg",
+    "brand": "Blue Gate",
+    "category": "battery",
+    "visibleModel": "NP9-12",
+    "visualFeatures": "A black rectangular valve-regulated lead-acid battery with two metal terminals on the top surface.",
+    "view": "side"
+  },
+  "1781587829612_1000044437.jpg": {
+    "file": "1781587829612_1000044437.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "White desktop inkjet printer with a top paper feed and a front-loading output tray displaying a color printout.",
+    "view": "front"
+  },
+  "1781587829945_1000044435.jpg": {
+    "file": "1781587829945_1000044435.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A sleek black tower-style UPS unit featuring a prominent purple vertical accent panel containing a power button and status indicators.",
+    "view": "front"
+  },
+  "1781587830334_1000044432.jpg": {
+    "file": "1781587830334_1000044432.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "",
+    "visualFeatures": "A white and gray multifunction laser printer featuring a top scanner bed, a front paper output tray with a printed document partially ejected, and a protruding control panel at the bottom.",
+    "view": "front"
+  },
+  "1781587830921_1000044430.jpg": {
+    "file": "1781587830921_1000044430.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A sleek black uninterruptible power supply unit shown from a side perspective with a blue front faceplate.",
+    "view": "side"
+  },
+  "1781587831409_1000044427.jpg": {
+    "file": "1781587831409_1000044427.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "Blue Gate",
+    "visualFeatures": "A black tower-style uninterruptible power supply with a prominent blue central panel containing a power button and status indicators.",
+    "view": "side"
+  },
+  "1781587831816_1000044424.jpg": {
+    "file": "1781587831816_1000044424.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A black, tower-style Uninterruptible Power Supply (UPS) unit featuring a distinct blue vertical accent panel with status indicator lights on the front.",
+    "view": "front"
+  },
+  "1781587832194_1000044421.jpg": {
+    "file": "1781587832194_1000044421.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A boxy multi-function laser printer in white and grey with an integrated top scanner and a front output tray.",
+    "view": "front"
+  },
+  "1781587832554_1000044412.jpg": {
+    "file": "1781587832554_1000044412.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white and dark grey all-in-one laser printer with a top document feeder and front paper tray.",
+    "view": "side"
+  },
+  "1781587832808_1000044415.jpg": {
+    "file": "1781587832808_1000044415.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A black tower-style uninterruptible power supply with a blue vertical accent strip and status LEDs on the front panel.",
+    "view": "side"
+  },
+  "1781587833054_1000044418.jpg": {
+    "file": "1781587833054_1000044418.jpg",
+    "brand": "Blue Gate",
+    "category": "ups",
+    "visibleModel": "unknown",
+    "visualFeatures": "A black tower-style uninterruptible power supply with a vertical purple accent panel containing power buttons and status LEDs.",
+    "view": "front"
+  },
+  "1781587833340_1000044409.jpg": {
+    "file": "1781587833340_1000044409.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A white, boxy multi-function laser printer with a top flatbed scanner and a front-loading paper input tray.",
+    "view": "front"
+  },
+  "1781587833669_1000044406.jpg": {
+    "file": "1781587833669_1000044406.jpg",
+    "brand": "HP",
+    "category": "printer",
+    "visibleModel": "unknown",
+    "visualFeatures": "A boxy, compact white printer with a dark grey paper feed tray protruding from the front.",
+    "view": "side"
+  },
+  "1781587834381_1000044564.jpg": {
+    "file": "1781587834381_1000044564.jpg",
+    "brand": "HP",
+    "category": "desktop",
+    "visibleModel": "unknown",
+    "visualFeatures": "An all-in-one computer featuring a sleek black display monitor mounted on a silver cylindrical stand, accompanied by a wired keyboard and mouse.",
+    "view": "side"
+  }
+}

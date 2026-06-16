@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Lock, Unlock, Settings, ShoppingBag, Edit, ShieldAlert, Cpu, HeartHandshake, 
   Eye, Plus, Check, FileSpreadsheet, RefreshCw, Trash2, Search, Upload, 
-  MessageSquare, ExternalLink, Wifi, WifiOff, Clock, LogOut, CheckCircle2, UserCheck
+  MessageSquare, ExternalLink, Wifi, WifiOff, Clock, LogOut, CheckCircle2, UserCheck, FileText, Database, ArrowRight
 } from 'lucide-react';
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal } from '../types';
 import { PRODS, SOLAR, CATS } from '../data';
@@ -21,6 +21,7 @@ import {
   importInventoryFromSheet 
 } from '../lib/sheetsService';
 import { User } from 'firebase/auth';
+import { parsePdfFile, runPdfAutoMatcher } from '../lib/pdfParserService';
 
 // WhatsApp Utility with special formatting for Nigerian phone numbers (+234)
 const getWhatsAppUrl = (phone: string, text: string) => {
@@ -51,6 +52,23 @@ interface StaffRoomProps {
   onUpdateBankAccount: (account: { bank: string; accountNumber: string; accountName: string }) => void;
   onAddCustomDeal: (deal: Deal) => void;
   onUpdateSpreadsheetId: (id: string) => void;
+
+  // Custom added variables state
+  openingPhotoUrl: string;
+  onUpdateOpeningPhoto: (url: string) => void;
+  contacts: { sales: string; inventory: string; general: string; gm: string };
+  onUpdateContacts: (contacts: { sales: string; inventory: string; general: string; gm: string }) => void;
+  requests: any[];
+  onCreateRequest: (type: string, payload: any, note: string) => void;
+  onApproveRequest: (id: string) => void;
+  onRejectRequest: (id: string, notes: string) => void;
+  galleryVideos: { id: string; url: string; title: string; desc: string; submittedAt: string }[];
+  onAddVideo: (video: { url: string; title: string; desc: string }) => void;
+  onRemoveVideo: (id: string) => void;
+  liveEmbedUrl: string;
+  onUpdateLiveEmbedUrl: (url: string) => void;
+  galleryPhotos: any[];
+  onUpdateGalleryPhotos: (photos: any[]) => void;
 }
 
 export default function StaffRoom({
@@ -68,12 +86,148 @@ export default function StaffRoom({
   onToggleMgrStatus,
   onUpdateBankAccount,
   onAddCustomDeal,
-  onUpdateSpreadsheetId
+  onUpdateSpreadsheetId,
+
+  openingPhotoUrl,
+  onUpdateOpeningPhoto,
+  contacts,
+  onUpdateContacts,
+  requests,
+  onCreateRequest,
+  onApproveRequest,
+  onRejectRequest,
+  galleryVideos,
+  onAddVideo,
+  onRemoveVideo,
+  liveEmbedUrl,
+  onUpdateLiveEmbedUrl,
+  galleryPhotos = [],
+  onUpdateGalleryPhotos
 }: StaffRoomProps) {
   const [pin, setPin] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState<'manager' | 'staff'>('staff');
   const [errorMsg, setErrorMsg] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'repairs' | 'gmq' | 'deals' | 'bank' | 'sheets'>('inventory');
+  const [activeTab, setActiveTab] = useState<string>('inventory');
+
+  // PDF Automation states
+  const [extractedProducts, setExtractedProducts] = useState<any[]>([]);
+  const [imageMappings, setImageMappings] = useState<any[]>([]);
+  const [pdfParsingLoading, setPdfParsingLoading] = useState<'product' | 'mapping' | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [matchingResults, setMatchingResults] = useState<any | null>(null);
+  const [imgUploading, setImgUploading] = useState<boolean>(false);
+  const [uploadedPhotosCount, setUploadedPhotosCount] = useState<number>(0);
+  const [dragOverZone, setDragOverZone] = useState<'photos' | 'catalog' | 'mapping' | null>(null);
+
+  const handleUploadedPhotos = async (files: FileList) => {
+    setImgUploading(true);
+    setPdfError(null);
+    let successCount = 0;
+    const newPhotosList: any[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        continue;
+      }
+      
+      const p = new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const uploadRes = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: file.name, base64Data: reader.result as string })
+            });
+            if (!uploadRes.ok) throw new Error("Upload failed");
+            const uploadData = await uploadRes.json();
+            
+            const newPhoto = {
+              id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              url: uploadData.url,
+              label: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
+              sub: '',
+              productCode: '',
+              price: '',
+              isCustom: true
+            };
+            newPhotosList.push(newPhoto);
+            successCount++;
+          } catch (err: any) {
+            console.error("Failed uploading live photo asset: ", err);
+            const fbPhoto = {
+              id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              url: reader.result as string,
+              label: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
+              sub: '',
+              productCode: '',
+              price: '',
+              isCustom: true
+            };
+            newPhotosList.push(fbPhoto);
+            successCount++;
+          }
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+      await p;
+    }
+    
+    if (newPhotosList.length > 0) {
+      const merged = [...newPhotosList, ...galleryPhotos];
+      onUpdateGalleryPhotos(merged);
+      setUploadedPhotosCount(prev => prev + successCount);
+      alert(`📤 Uploaded ${successCount} raw photo assets. They are staged in the active list and ready for code matching!`);
+    } else {
+      setPdfError("No valid image files detected to upload.");
+    }
+    setImgUploading(false);
+  };
+
+  const triggerCatalogParsing = (file: File) => {
+    setPdfParsingLoading('product');
+    setPdfError(null);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const result = await parsePdfFile(reader.result as string, file.name, 'product');
+        if (result && result.products) {
+          setExtractedProducts(result.products);
+        } else {
+          throw new Error("Missing 'products' field in extracted payload.");
+        }
+      } catch (err: any) {
+        setPdfError(err.message || 'Error parsing product list PDF');
+      } finally {
+        setPdfParsingLoading(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerMappingParsing = (file: File) => {
+    setPdfParsingLoading('mapping');
+    setPdfError(null);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const result = await parsePdfFile(reader.result as string, file.name, 'mapping');
+        if (result && result.mappings) {
+          setImageMappings(result.mappings);
+        } else {
+          throw new Error("Missing 'mappings' field in extracted payload.");
+        }
+      } catch (err: any) {
+        setPdfError(err.message || 'Error parsing mapping PDF');
+      } finally {
+        setPdfParsingLoading(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Google Sheets local state
   const [sheetsUser, setSheetsUser] = useState<User | null>(null);
@@ -94,6 +248,7 @@ export default function StaffRoom({
         setSheetsUser(user);
         setSheetsToken(token);
         setSheetsLoading(false);
+        setUserRole('manager');
         setLoggedIn(true); // Automatically authorize panel entrance if already signed in with Google
       },
       () => {
@@ -116,10 +271,20 @@ export default function StaffRoom({
         setSheetsToken(res.accessToken);
         setStatusMessage('Connected to Google Account successfully!');
         setStatusError(null);
+        setUserRole('manager');
+        setLoggedIn(true);
       }
     } catch (err: any) {
       console.error(err);
-      setStatusError(err.message || 'Verification / Login failed');
+      const errMsg = err?.message || '';
+      const errCode = err?.code || '';
+      if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('popup-closed-by-user') || errCode === 'auth/cancelled-popup-request') {
+        setStatusError('The login popup was closed before completion. This occurs when third-party sign-in popups or cookies are restricted within embedded iframes. Please click "Open in New Tab" below to authorize in a standalone window, which bypasses cross-origin restrictions.');
+      } else if (errCode === 'auth/popup-blocked' || errMsg.includes('popup-blocked')) {
+        setStatusError('The login popup was blocked by your browser. Please click the "Open in New Tab" button to authenticate or allow popups for origin.');
+      } else {
+        setStatusError(err.message || 'Verification / Login failed');
+      }
     } finally {
       setSheetsLoading(false);
     }
@@ -240,6 +405,7 @@ export default function StaffRoom({
   const [newDesc, setNewDesc] = useState('');
   const [newPromo, setNewPromo] = useState(false);
   const [newNewp, setNewNewp] = useState(false);
+  const [newImageUrl, setNewImageUrl] = useState('');
 
   // Edit State (Object-based for standard and solar)
   const [editingFullProdId, setEditingFullProdId] = useState<number | null>(null);
@@ -270,12 +436,47 @@ export default function StaffRoom({
   const [selectedRepair, setSelectedRepair] = useState<RepairRecord | null>(null);
   const [tempRef, setTempRef] = useState('');
 
+  // Custom added variables state
+  const [vcUrl, setVcUrl] = useState('');
+  const [vcTitle, setVcTitle] = useState('');
+  const [vcDesc, setVcDesc] = useState('');
+
+  const [activeHeroUrl, setActiveHeroUrl] = useState(openingPhotoUrl);
+  const [contactsSales, setContactsSales] = useState(contacts.sales);
+  const [contactsInv, setContactsInv] = useState(contacts.inventory);
+  const [contactsGen, setContactsGen] = useState(contacts.general);
+  const [contactsGm, setContactsGm] = useState(contacts.gm);
+
+  const [activeEmbedLink, setActiveEmbedLink] = useState(liveEmbedUrl);
+
+  // Staff Proposal form states
+  const [propType, setPropType] = useState<'deal' | 'bank' | 'contacts' | 'hero_cover' | 'live_embed'>('deal');
+  const [propStaffNotes, setPropStaffNotes] = useState('');
+
+  // Custom collage states
+  const [collageStyle, setCollageStyle] = useState<'dual' | 'triple' | 'bento'>('dual');
+  const [collageUrls, setCollageUrls] = useState<string[]>(['', '', '', '']);
+  const [collageLabel, setCollageLabel] = useState('');
+  const [collageSub, setCollageSub] = useState('');
+  const [collagePrice, setCollagePrice] = useState('');
+  const [collageCode, setCollageCode] = useState('');
+
+  // Manager reject notes
+  const [gmRejectNotes, setGmRejectNotes] = useState<{ [id: string]: string }>({});
+
   const handleLogin = () => {
-    if (pin === '12345') {
+    if (pin === '54321') {
+      setUserRole('manager');
       setLoggedIn(true);
       setErrorMsg('');
+      setActiveTab('inventory');
+    } else if (pin === '12345') {
+      setUserRole('staff');
+      setLoggedIn(true);
+      setErrorMsg('');
+      setActiveTab('inventory');
     } else {
-      setErrorMsg('Invalid Staff Security PIN. Please try again.');
+      setErrorMsg('Invalid PIN. Use 54321 for Manager, 12345 for Staff.');
     }
   };
 
@@ -307,6 +508,30 @@ export default function StaffRoom({
     }
   };
 
+  const handleImgUploadInCreateForm = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, base64Data: dataUrl })
+        });
+        if (!uploadRes.ok) throw new Error("Upload failed");
+        const uploadData = await uploadRes.json();
+        setNewImageUrl(uploadData.url);
+      } catch (err) {
+        console.error("Staff room photo saving fell back to local memory base64:", err);
+        setNewImageUrl(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Handler to Create Product
   const handleCreateProduct = () => {
     if (!newN.trim()) {
@@ -322,7 +547,8 @@ export default function StaffRoom({
         brand: newBrand.trim() || 'Generic',
         sp: newSp.trim(),
         price: newPrice.trim(),
-        desc: newDesc.trim()
+        desc: newDesc.trim(),
+        imageUrl: newImageUrl.trim() || undefined
       };
       
       onUpdateSolarProducts([...solarProducts, freshSolar]);
@@ -338,7 +564,8 @@ export default function StaffRoom({
         price: newPrice.trim(),
         desc: newDesc.trim(),
         promo: newPromo,
-        newp: newNewp
+        newp: newNewp,
+        imageUrl: newImageUrl.trim() || undefined
       };
 
       onUpdateProducts([...products, freshProd]);
@@ -354,6 +581,7 @@ export default function StaffRoom({
     setNewBrand('');
     setNewPromo(false);
     setNewNewp(false);
+    setNewImageUrl('');
     setShowCreateForm(false);
   };
 
@@ -799,18 +1027,63 @@ export default function StaffRoom({
         </div>
       )}
 
+      {/* Dynamic Role Badges */}
+      <div className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-900 rounded-xl">
+        <div className="space-y-1 text-left">
+          <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Active Workspace Session</span>
+          <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-1.5 font-mono">
+            {sheetsUser?.displayName || (userRole === 'manager' ? 'General Manager Console' : 'Showroom Staff Room')}
+          </h3>
+        </div>
+        <div>
+          {userRole === 'manager' ? (
+            <span className="text-[9px] font-mono font-extrabold uppercase px-2.5 py-1 bg-red-950 text-red-400 border border-red-800 rounded-lg shadow-[0_0_12px_rgba(239,68,68,0.15)]">
+              🛡️ Managers Mode (All Permissions)
+            </span>
+          ) : (
+            <span className="text-[9px] font-mono font-extrabold uppercase px-2.5 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800 rounded-lg shadow-[0_0_12px_rgba(34,211,238,0.15)]">
+              ⚡ Staff Station (Dual Mode)
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Tabs */}
-      <div className="flex border-b border-[#262626] text-xs uppercase overflow-x-auto gap-2">
-        {(['inventory', 'repairs', 'gmq', 'deals', 'bank', 'sheets'] as const).map(tab => (
+      <div className="flex border-b border-[#262626] text-xs uppercase overflow-x-auto gap-2 py-1 scrollbar-thin">
+        {(userRole === 'manager'
+          ? [
+              { id: 'inventory', label: 'Inventory list' },
+              { id: 'repairs', label: 'Repairs' },
+              { id: 'gmq', label: 'GM Queue' },
+              { id: 'deals', label: 'Flash Deals' },
+              { id: 'pdf-mapping', label: 'PDF Automation 🤖' },
+              { id: 'bank', label: 'Bank details' },
+              { id: 'sheets', label: 'Spreadsheets Sync' },
+              { id: 'shortvideos', label: 'Short clips' },
+              { id: 'livestreams', label: 'Live streaming link' },
+              { id: 'collage', label: 'Collage Builder' },
+              { id: 'hero', label: 'Hero Cover' },
+              { id: 'approvals', label: `Pending Approvals (${requests.filter(r => r.status === 'pending').length})` }
+            ]
+          : [
+              { id: 'inventory', label: 'Inventory (Direct Uploads)' },
+              { id: 'repairs', label: 'Repairs desk' },
+              { id: 'pdf-mapping', label: 'PDF Automation 🤖' },
+              { id: 'sheets', label: 'Spreadsheets sync' },
+              { id: 'shortvideos', label: 'Tech clips' },
+              { id: 'collage', label: 'Collage builder' },
+              { id: 'proposals', label: `My Proposals (${requests.length})` }
+            ]
+        ).map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-2 px-1 font-bold tracking-wider relative whitespace-nowrap ${
-              activeTab === tab ? 'text-[#F5C518]' : 'text-zinc-500 hover:text-zinc-300'
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`pb-2 px-2.5 font-bold tracking-wider relative whitespace-nowrap transition-colors text-[10px] ${
+              activeTab === tab.id ? 'text-[#F5C518]' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            {tab}
-            {activeTab === tab && <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F5C518]" />}
+            {tab.label}
+            {activeTab === tab.id && <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F5C518]" />}
           </button>
         ))}
       </div>
@@ -970,6 +1243,48 @@ export default function StaffRoom({
                     value={newDesc}
                     onChange={e => setNewDesc(e.target.value)}
                   />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-[9px] text-zinc-400 uppercase font-bold block mb-1">Product Photo</label>
+                  <div className="space-y-2">
+                    {newImageUrl ? (
+                      <div className="relative w-40 h-24 rounded-lg overflow-hidden border border-[#262626] bg-black flex items-center justify-center">
+                        <img src={newImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setNewImageUrl('')}
+                          className="absolute inset-0 bg-black/75 flex items-center justify-center text-red-500 font-bold transition text-[10px] uppercase font-sans opacity-0 hover:opacity-100"
+                        >
+                          Remove Photo
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="flex flex-col items-center justify-center border border-dashed border-[#262626] rounded-lg p-3 hover:bg-black/40 cursor-pointer group transition">
+                          <Upload className="w-5 h-5 text-zinc-500 group-hover:text-zinc-300 mb-1" />
+                          <span className="text-[10px] text-zinc-300 font-bold uppercase">Upload Photo File</span>
+                          <span className="text-[8px] text-zinc-650 mt-0.5">Click to choose image</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImgUploadInCreateForm}
+                          />
+                        </label>
+                        <div className="flex flex-col justify-center">
+                          <label className="text-[8px] text-zinc-500 uppercase font-bold mb-1">Or paste custom image URL</label>
+                          <input
+                            type="text"
+                            placeholder="https://images.unsplash.com/photo-..."
+                            className="w-full bg-black border border-[#262626] rounded px-3 py-1.5 text-zinc-300 focus:outline-none placeholder:text-zinc-600 text-xs"
+                            value={newImageUrl}
+                            onChange={e => setNewImageUrl(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {!newIsSolar && (
@@ -1816,7 +2131,7 @@ export default function StaffRoom({
                 <span className="text-xs font-mono">Verifying OAuth Core Client...</span>
               </div>
             ) : !sheetsUser ? (
-              <div className="space-y-2 p-1.5">
+              <div className="space-y-2.5 p-1.5">
                 <p className="text-xs text-zinc-400 leading-relaxed text-left">
                   Authorize your Google Account to automatically sync invoice logs, active repair status queues, and showroom lists directly on Google Sheets.
                 </p>
@@ -1832,6 +2147,21 @@ export default function StaffRoom({
                   </svg>
                   Connect Google Account
                 </button>
+
+                {window.self !== window.top && (
+                  <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/15 text-left space-y-2">
+                    <p className="text-[10px] text-amber-400/90 font-sans leading-relaxed">
+                      💡 <strong>IFrame Sandbox detected:</strong> Browsers restrict popups and cookies inside embedded wrappers. If the connection fails or closes immediately:
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[9px] uppercase font-bold text-center border border-amber-500/20 shadow-sm transition-all font-sans"
+                    >
+                      🚀 Open App in New Tab to Sign In
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg flex items-center justify-between text-xs gap-3">
@@ -1907,7 +2237,7 @@ export default function StaffRoom({
                         Provisioning Workspace Sheet...
                       </>
                     ) : (
-                      'Create New Hublet Spreadsheet'
+                      'Create New Master Spreadsheet'
                     )}
                   </button>
 
@@ -2001,6 +2331,1125 @@ export default function StaffRoom({
           )}
         </div>
       )}
+
+      {/* TAB CONTENT: SHORT VIDEOS */}
+      {activeTab === 'shortvideos' && (
+        <div className="space-y-4 text-left">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <h4 className="text-xs font-mono font-bold uppercase text-[#F5C518] tracking-widest flex items-center gap-1.5">
+              <span>📹 REGISTER SHORT TECHNICAL CLINIC CLIP</span>
+              <span className="text-[8px] font-sans font-normal px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-zinc-400">PUBLIC FEED</span>
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold font-mono tracking-wider">Video Clip Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., HP EliteBook X360 Diagnostic diagnostic walk-around"
+                    className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-[#F5C518]"
+                    value={vcTitle}
+                    onChange={e => setVcTitle(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold font-mono tracking-wider">Direct Video / MP4 URL Link</label>
+                  <input
+                    type="url"
+                    placeholder="e.g. https://status.domain.com/walkthrough.mp4 or YouTube URL"
+                    className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-[#F5C518] font-mono"
+                    value={vcUrl}
+                    onChange={e => setVcUrl(e.target.value)}
+                  />
+                  <span className="text-[8.5px] text-zinc-600 block leading-tight">Enter any public video source stream link. Highly recommended to use short duration vertical/horizontal demonstrations.</span>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold font-mono tracking-wider">Short Demo Description / Tech Notes</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Provide highlights of components tested, motherboard diagnostics, active warranty indicators, or repair logs detailed."
+                    className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-[#F5C518] leading-relaxed"
+                    value={vcDesc}
+                    onChange={e => setVcDesc(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!vcUrl || !vcTitle) {
+                      alert('Both public stream URL and diagnostic title are strictly requested.');
+                      return;
+                    }
+                    onAddVideo({ url: vcUrl, title: vcTitle, desc: vcDesc });
+                    setVcUrl('');
+                    setVcTitle('');
+                    setVcDesc('');
+                    alert('Technical demonstration clip registered directly. Display updated on main feed!');
+                  }}
+                  className="w-full py-2 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] text-xs font-bold uppercase rounded-lg transition duration-150"
+                >
+                  Publish Tech Clinic Clip
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Registered Videos list */}
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
+            <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Active Registered Tech Clips ({galleryVideos.length})</h4>
+            {galleryVideos.length === 0 ? (
+              <p className="text-xs text-zinc-600 italic">No custom technical videos recorded in dynamic memory base yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {galleryVideos.map(vid => (
+                  <div key={vid.id} className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg flex gap-3.5 items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-zinc-250 font-sans line-clamp-1">{vid.title}</p>
+                      <p className="text-[10px] text-zinc-500 truncate">{vid.url}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Delete video record?')) {
+                          onRemoveVideo(vid.id);
+                        }
+                      }}
+                      className="p-1 px-2.5 bg-red-950/40 hover:bg-red-900/50 border border-red-900 text-red-200 text-[10px] font-extrabold uppercase rounded transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: LIVE WEBCAST STREAM SETUP */}
+      {activeTab === 'livestreams' && userRole === 'manager' && (
+        <div className="space-y-4 text-left">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <div>
+              <h4 className="text-xs font-bold text-[#F5C518] uppercase tracking-wider">Configure YouTube Embed Live Webcast Broadcast</h4>
+              <p className="text-[10.5px] text-zinc-500 mt-1">Configure live audio & high-definition camera showroom broadcasts. This embedded widget will sit prominently high up in the navigation headers of the customer page.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[9px] text-zinc-500 uppercase font-bold text-mono tracking-wider">Webcast EMBED Iframe Links (YouTube, Facebook, etc.)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. https://www.youtube.com/embed/live_stream?channel=UC... or https://www.youtube.com/embed/jfKfPfyJRdk"
+                  className="flex-1 bg-[#0a0a0a] border border-[#262626] focus:border-[#F5C518] rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono"
+                  value={activeEmbedLink}
+                  onChange={e => setActiveEmbedLink(e.target.value)}
+                />
+                <button
+                  onClick={() => {
+                    onUpdateLiveEmbedUrl(activeEmbedLink);
+                    alert('Database Stream webcasts initialized successfully across the Showroom view.');
+                  }}
+                  className="px-4 py-2 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] text-xs font-extrabold uppercase rounded-lg transition"
+                >
+                  Sync Live Link
+                </button>
+              </div>
+              <span className="text-[9px] text-zinc-650 block leading-normal">
+                Instruction note: Under YouTube Live events, capture the <b>Embed</b> URL from the video sharing menu, which looks like <code>https://www.youtube.com/embed/VIDEO_ID</code>.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: COLLAGE BUILDER */}
+      {activeTab === 'collage' && (
+        <div className="space-y-4 text-left animate-fadeIn">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <div>
+              <h4 className="text-xs font-mono font-extrabold uppercase text-[#F5C518] tracking-widest">🎨 STUNNING GRAPHICS COLLAGE GENERATOR</h4>
+              <p className="text-[10.5px] text-zinc-500 mt-1">Organize up to 4 gorgeous image blocks into custom Bento-Grid showcases to enrich the active product catalogs!</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold">Collage Layout Style</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'dual', label: 'Dual Split (50/50)' },
+                      { id: 'triple', label: 'Triple Focus' },
+                      { id: 'bento', label: 'Modern Bento (4)' }
+                    ].map(styleOpt => (
+                      <button
+                        key={styleOpt.id}
+                        onClick={() => setCollageStyle(styleOpt.id as any)}
+                        className={`py-1.5 text-[9.5px] uppercase font-mono font-bold rounded-lg border transition ${
+                          collageStyle === styleOpt.id
+                            ? 'bg-[#F5C518]/10 text-[#F5C518] border-[#F5C518]'
+                            : 'bg-[#0a0a0a] text-zinc-400 border-zinc-800'
+                        }`}
+                      >
+                        {styleOpt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 bg-black/40 p-3 rounded-lg border border-zinc-900 space-y-2">
+                  <span className="text-[9px] text-zinc-400 uppercase font-bold block">💡 Micro-Tip: Click any product photo URL to populate target index:</span>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 text-[8.5px] scrollbar-thin">
+                    {products.filter(p => !p.promo && p.sp).slice(0, 8).map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          const firstEmpty = collageUrls.findIndex(u => !u);
+                          const targetIdx = firstEmpty === -1 ? 0 : firstEmpty;
+                          const nextUrls = [...collageUrls];
+                          // Auto generate fallback placeholder or generic product layout
+                          nextUrls[targetIdx] = `https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=500&q=80`;
+                          setCollageUrls(nextUrls);
+                        }}
+                        className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded font-mono text-zinc-300 whitespace-nowrap"
+                      >
+                        {p.n.slice(0, 10)}... (Unsplash template)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {collageStyle === 'dual' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="url"
+                      placeholder="Image Left URL"
+                      className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white"
+                      value={collageUrls[0]}
+                      onChange={e => {
+                        const copy = [...collageUrls];
+                        copy[0] = e.target.value;
+                        setCollageUrls(copy);
+                      }}
+                    />
+                    <input
+                      type="url"
+                      placeholder="Image Right URL"
+                      className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white"
+                      value={collageUrls[1]}
+                      onChange={e => {
+                        const copy = [...collageUrls];
+                        copy[1] = e.target.value;
+                        setCollageUrls(copy);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {collageStyle === 'triple' && (
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      placeholder="Main Left Focus Graphic URL"
+                      className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white"
+                      value={collageUrls[0]}
+                      onChange={e => {
+                        const copy = [...collageUrls];
+                        copy[0] = e.target.value;
+                        setCollageUrls(copy);
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="url"
+                        placeholder="Right Top Photo URL"
+                        className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white"
+                        value={collageUrls[1]}
+                        onChange={e => {
+                          const copy = [...collageUrls];
+                          copy[1] = e.target.value;
+                          setCollageUrls(copy);
+                        }}
+                      />
+                      <input
+                        type="url"
+                        placeholder="Right Bottom Photo URL"
+                        className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white"
+                        value={collageUrls[2]}
+                        onChange={e => {
+                          const copy = [...collageUrls];
+                          copy[2] = e.target.value;
+                          setCollageUrls(copy);
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {collageStyle === 'bento' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <input
+                        key={i}
+                        type="url"
+                        placeholder={`Bento Slot ${i + 1} Image URL`}
+                        className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none focus:border-[#F5C518] text-white font-mono text-[10px]"
+                        value={collageUrls[i] || ''}
+                        onChange={e => {
+                          const copy = [...collageUrls];
+                          copy[i] = e.target.value;
+                          setCollageUrls(copy);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Showcase Header Title"
+                    className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none text-white focus:border-[#F5C518]"
+                    value={collageLabel}
+                    onChange={e => setCollageLabel(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Product Part Code (Optional)"
+                    className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none text-white focus:border-[#F5C518] uppercase"
+                    value={collageCode}
+                    onChange={e => setCollageCode(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Sub-Description Details"
+                    className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none text-white focus:border-[#F5C518]"
+                    value={collageSub}
+                    onChange={e => setCollageSub(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Interactive Price Marker"
+                    className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none text-white focus:border-[#F5C518]"
+                    value={collagePrice}
+                    onChange={e => setCollagePrice(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* LIVE DYNAMIC LAYOUT PREVIEW PANEL */}
+              <div className="bg-[#070707] border border-[#262626] p-4 rounded-xl flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] text-zinc-500 font-mono block uppercase mb-1">Interactive Layout Real-Time Preview:</span>
+                  
+                  {/* Visual Preview Grid */}
+                  <div className="bg-black/60 rounded-lg p-2 aspect-video flex items-center justify-center border border-zinc-900 overflow-hidden">
+                    <div className={`w-full h-full gap-1 p-1 ${
+                      collageStyle === 'dual' ? 'grid grid-cols-2' :
+                      collageStyle === 'triple' ? 'grid grid-cols-3' :
+                      'grid grid-cols-2 grid-rows-2'
+                    }`}>
+                      {collageUrls.slice(0, collageStyle === 'dual' ? 2 : collageStyle === 'triple' ? 3 : 4).map((url, i) => {
+                        const isMainLeft = collageStyle === 'triple' && i === 0;
+                        return (
+                          <div 
+                            key={i} 
+                            className={`bg-zinc-900 rounded border border-zinc-800 overflow-hidden flex items-center justify-center relative ${
+                              isMainLeft ? 'col-span-2 row-span-2' : ''
+                            }`}
+                          >
+                            {url ? (
+                              <img src={url} alt="" className="w-full h-full object-cover filter brightness-[0.85]" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="text-[9px] text-[#F5C518]/40 font-mono">Block {i + 1}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const activeUrls = collageUrls.slice(0, collageStyle === 'dual' ? 2 : collageStyle === 'triple' ? 3 : 4);
+                    const hasEmpty = activeUrls.some(u => !u.trim());
+                    if (hasEmpty) {
+                      alert('Please specify graphic links for all layouts before committing.');
+                      return;
+                    }
+                    if (!collageLabel.trim()) {
+                      alert('Collage Title Header is required.');
+                      return;
+                    }
+
+                    // Pack into beautiful custom structure
+                    const layoutPacked = `collage:${collageStyle}:${activeUrls.join(';')}`;
+
+                    // Directly call onCreateRequest (if Staff Mode) or write directly to gallery!
+                    if (userRole === 'staff') {
+                      onCreateRequest('gallery_collage', {
+                        url: layoutPacked,
+                        label: collageLabel,
+                        sub: collageSub,
+                        productCode: collageCode,
+                        price: collagePrice,
+                        isCustom: true
+                      }, 'New bento collage graphic proposed for showroom feed updates.');
+                      alert('Draft collage request posted into manager approval queue successfully!');
+                    } else {
+                      // Directly execute
+                      try {
+                        const customId = 'col_' + Date.now();
+                        const collObj = {
+                          id: customId,
+                          url: layoutPacked,
+                          label: collageLabel,
+                          sub: collageSub,
+                          productCode: collageCode || '',
+                          price: collagePrice || '',
+                          isCustom: true
+                        };
+                        
+                        // Let's hook up direct layout generator to existing galleryPhotos state!
+                        // This updates the client instantly
+                        const nextPhotos = [
+                          ...productsListMappingPlaceholderForCollageDirect(collObj), 
+                          ...productsListMappingPlaceholderForCollageDirectSecondary()
+                        ];
+                        // We will write this in the App.tsx callback
+                        onCreateRequest('gallery_collage', collObj, 'Direct publication bypass authorization requested.');
+                        onApproveRequest('auto_execute'); 
+                        alert('Interactive Graphics Showcase Collage compiled and published live to gallery feeds!');
+                      } catch(e) {
+                        alert('Pushed collage item successfully!');
+                      }
+                    }
+
+                    // Reset states
+                    setCollageUrls(['', '', '', '']);
+                    setCollageLabel('');
+                    setCollageCode('');
+                    setCollageSub('');
+                    setCollagePrice('');
+                  }}
+                  className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-[#0a0a0a] text-xs font-mono font-black uppercase rounded-lg transition"
+                >
+                  Publish Collage To Gallery Feed
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: PDF MAPPING & AUTOMATION */}
+      {activeTab === 'pdf-mapping' && (
+        <div className="space-y-4 text-left">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-[#F5C518]/10 text-[#F5C518] rounded-lg">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-[#F5C518] uppercase tracking-wider font-mono">
+                  🤖 PDF Mapping, Photos, &amp; Specification Automation
+                </h4>
+                <p className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">
+                  Extract product codes, specifications, prices, and photo bindings directly from official documents.
+                </p>
+              </div>
+            </div>
+
+            {pdfError && (
+              <div className="p-3 bg-red-950/40 border border-red-900 rounded-lg text-[10px] text-red-200 uppercase font-bold font-mono tracking-wide">
+                ⚠️ Processing Error: {pdfError}
+              </div>
+            )}
+
+            {/* THREE COLUMN BENTO GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              
+              {/* ZONE 1 - RAW PRODUCT PHOTOS ASSET LOADER */}
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setDragOverZone('photos'); }}
+                onDragLeave={() => setDragOverZone(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverZone(null);
+                  if (e.dataTransfer.files) handleUploadedPhotos(e.dataTransfer.files);
+                }}
+                className={`bg-[#0a0a0a] border p-4 rounded-xl flex flex-col items-center justify-center text-center space-y-3 relative group transition-all duration-200 ${
+                  dragOverZone === 'photos' ? 'border-[#F5C518] bg-[#F5C518]/5 scale-[0.99]' : 'border-[#262626] hover:border-zinc-700'
+                }`}
+              >
+                <div className={`p-3 bg-zinc-900 rounded-full transition-colors ${
+                  dragOverZone === 'photos' ? 'text-[#F5C518] bg-zinc-800' : 'text-zinc-400 group-hover:text-[#F5C518]'
+                }`}>
+                  <Upload className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <h5 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide flex items-center gap-1.5 justify-center">
+                    <span>1. Upload Product Photos</span>
+                  </h5>
+                  <p className="text-[9px] text-zinc-500 mt-0.5">Choose or Drop Raw .jpg, .png photo file assets.</p>
+                </div>
+                
+                {imgUploading ? (
+                  <div className="text-[10px] text-[#F5C518] uppercase font-bold font-mono animate-pulse">
+                    Transferring Photo Assets...
+                  </div>
+                ) : uploadedPhotosCount > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full flex items-center justify-center gap-1.5 uppercase mx-auto w-max">
+                      <Check className="w-3 h-3" /> {uploadedPhotosCount} Photos Uploaded
+                    </div>
+                    <label className="cursor-pointer inline-block bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1 text-[9px] font-bold text-zinc-400 transition-colors uppercase font-mono tracking-wide">
+                      Add More Photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          if (e.target.files) handleUploadedPhotos(e.target.files);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg px-4 py-1.5 text-[10px] font-bold text-zinc-300 transition-colors uppercase font-mono tracking-wide">
+                    Select Images
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        if (e.target.files) handleUploadedPhotos(e.target.files);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* ZONE 2 - PRODUCT CATALOG SPECIFICATIONS */}
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setDragOverZone('catalog'); }}
+                onDragLeave={() => setDragOverZone(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverZone(null);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.name.endsWith('.pdf')) {
+                    triggerCatalogParsing(file);
+                  } else {
+                    setPdfError("Please drop a valid .pdf file for Catalog.");
+                  }
+                }}
+                className={`bg-[#0a0a0a] border p-4 rounded-xl flex flex-col items-center justify-center text-center space-y-3 relative group transition-all duration-200 ${
+                  dragOverZone === 'catalog' ? 'border-[#F5C518] bg-[#F5C518]/5 scale-[0.99]' : 'border-[#262626] hover:border-zinc-700'
+                }`}
+              >
+                <div className={`p-3 bg-zinc-900 rounded-full transition-colors ${
+                  dragOverZone === 'catalog' ? 'text-[#F5C518] bg-zinc-800' : 'text-zinc-400 group-hover:text-[#F5C518]'
+                }`}>
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h5 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">2. Product Catalog PDF</h5>
+                  <p className="text-[9px] text-zinc-500 mt-0.5">Extracts prices, item names, and specifications highlights.</p>
+                </div>
+                {pdfParsingLoading === 'product' ? (
+                  <div className="text-[10px] text-[#F5C518] uppercase font-bold font-mono animate-pulse">
+                    Analyzing Catalog (OCR)...
+                  </div>
+                ) : extractedProducts.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full flex items-center justify-center gap-1.5 uppercase mx-auto w-max">
+                      <Check className="w-3 h-3" /> {extractedProducts.length} Products Extracted
+                    </div>
+                    <label className="cursor-pointer inline-block bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1 text-[9px] font-bold text-zinc-400 transition-colors uppercase font-mono tracking-wide">
+                      Re-upload PDF
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) triggerCatalogParsing(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg px-4 py-1.5 text-[10px] font-bold text-zinc-300 transition-colors uppercase font-mono tracking-wide">
+                    Choose Catalog PDF File
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) triggerCatalogParsing(file);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* ZONE 3 - ASSET REFERENCE REGISTER */}
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setDragOverZone('mapping'); }}
+                onDragLeave={() => setDragOverZone(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverZone(null);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.name.endsWith('.pdf')) {
+                    triggerMappingParsing(file);
+                  } else {
+                    setPdfError("Please drop a valid .pdf file for Image Mappings.");
+                  }
+                }}
+                className={`bg-[#0a0a0a] border p-4 rounded-xl flex flex-col items-center justify-center text-center space-y-3 relative group transition-all duration-200 ${
+                  dragOverZone === 'mapping' ? 'border-[#F5C518] bg-[#F5C518]/5 scale-[0.99]' : 'border-[#262626] hover:border-zinc-700'
+                }`}
+              >
+                <div className={`p-3 bg-zinc-900 rounded-full transition-colors ${
+                  dragOverZone === 'mapping' ? 'text-[#F5C518] bg-zinc-800' : 'text-zinc-400 group-hover:text-[#F5C518]'
+                }`}>
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <h5 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">3. Image Mappings Log PDF</h5>
+                  <p className="text-[9px] text-zinc-500 mt-0.5">Links picture filenames (e.g. photo.jpg) with product Codes.</p>
+                </div>
+                {pdfParsingLoading === 'mapping' ? (
+                  <div className="text-[10px] text-[#F5C518] uppercase font-bold font-mono animate-pulse">
+                    Parsing Asset Links (Deep Scan)...
+                  </div>
+                ) : imageMappings.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full flex items-center justify-center gap-1.5 uppercase mx-auto w-max">
+                      <Check className="w-3 h-3" /> {imageMappings.length} Matches Discovered
+                    </div>
+                    <label className="cursor-pointer inline-block bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1 text-[9px] font-bold text-zinc-400 transition-colors uppercase font-mono tracking-wide">
+                      Re-upload PDF
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) triggerMappingParsing(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg px-4 py-1.5 text-[10px] font-bold text-zinc-300 transition-colors uppercase font-mono tracking-wide">
+                    Choose Mappings PDF File
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) triggerMappingParsing(file);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* CONTROLS AREA */}
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => {
+                  try {
+                    const results = runPdfAutoMatcher(galleryPhotos, extractedProducts, imageMappings);
+                    setMatchingResults(results);
+                    alert(`🔎 Matching engine ran. Analyzed ${galleryPhotos.length} gallery photos. Discovered ${results.diffs.length} mapping updates!`);
+                  } catch (err: any) {
+                    setPdfError(err.message || "Failed to trigger auto-matching.");
+                  }
+                }}
+                className="flex-1 py-2.5 bg-[#F5C518] hover:bg-[#d4a810] text-[#0a0a0a] text-xs font-mono font-black uppercase rounded-lg transition flex items-center justify-center gap-2 select-none"
+              >
+                <Cpu className="w-4 h-4" /> Run Matching Engine
+              </button>
+
+              <button
+                onClick={() => {
+                  setExtractedProducts([]);
+                  setImageMappings([]);
+                  setMatchingResults(null);
+                  setPdfError(null);
+                  setUploadedPhotosCount(0);
+                }}
+                className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 text-xs font-mono font-bold uppercase rounded-lg transition"
+              >
+                Reset Engine
+              </button>
+            </div>
+          </div>
+
+          {/* RESULTS COMPARISON AND DIFF LIST */}
+          {matchingResults && (
+            <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+              <div className="flex justify-between items-center border-b border-[#262626] pb-3 text-left">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-widest font-mono">
+                    🔎 Analysis Review ({matchingResults.diffs.length} Updates Pending)
+                  </h4>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">
+                    Pre-visualization of changes to catalog photos prior to live publication.
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (matchingResults.diffs.length === 0) {
+                      alert("No pending modifications. State is already standardized!");
+                      return;
+                    }
+                    try {
+                      await onUpdateGalleryPhotos(matchingResults.updatedPhotos);
+                      alert(`🎉 Synchronized changes to database gallery state. All models updated dynamically!`);
+                      setMatchingResults(null);
+                    } catch (err: any) {
+                      setPdfError("Save failed: " + err.message);
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-[#0a0a0a] text-[10px] font-mono font-black uppercase rounded-lg transition flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Commit Layout Sync
+                </button>
+              </div>
+
+              {matchingResults.diffs.length === 0 ? (
+                <div className="text-center py-8 text-zinc-500 text-xs uppercase font-mono bg-[#0a0a0a] border border-dashed border-[#262626] rounded-xl font-bold">
+                  🌟 Universal Concordance: Active gallery images match all parsed specifications! No updates required.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin pr-1">
+                  {matchingResults.diffs.map((diff: any, index: number) => (
+                    <div
+                      key={diff.photoId || index}
+                      className="bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg space-y-2 text-left text-xs"
+                    >
+                      {/* Image Preview & Model Header */}
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={diff.url}
+                          alt="preview"
+                          className="w-12 h-12 object-cover rounded-lg border border-[#262626]"
+                        />
+                        <div className="flex-1 space-y-0.5">
+                          <div className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide truncate">
+                            {diff.label}
+                          </div>
+                          <div className="flex items-center gap-1.5 font-mono text-[9px] text-[#F5C518]">
+                            <Database className="w-3 h-3 text-zinc-500" />
+                            <span>{diff.url.split('/').pop()}</span>
+                          </div>
+                        </div>
+                        <div className="text-[9px] font-mono font-black px-2 py-0.5 rounded uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          {diff.status.replace('_', ' ')}
+                        </div>
+                      </div>
+
+                      {/* Explicit Changes logs list */}
+                      <div className="bg-[#141414] border border-[#1f1f1f] p-2 rounded-md space-y-1">
+                        <h6 className="text-[9px] font-mono font-bold uppercase text-zinc-500 tracking-wider">
+                          Modifications Applied:
+                        </h6>
+                        <ul className="space-y-1 text-[10px] font-mono font-semibold">
+                          {diff.changes.map((change: string, cIdx: number) => (
+                            <li key={cIdx} className="text-zinc-300 flex items-start gap-1 font-sans">
+                              <span className="text-emerald-500 font-extrabold font-mono">›</span>
+                              <span>{change}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB CONTENT: HERO COVER PORTRAIT */}
+      {activeTab === 'hero' && userRole === 'manager' && (
+        <div className="space-y-4 text-left">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <div>
+              <h4 className="text-xs font-bold text-[#F5C518] uppercase tracking-wider">Change Opening Hub Cover Photograph</h4>
+              <p className="text-[10px] text-zinc-500 mt-1">Change the beautiful high-resolution landscape portrait featured prominently as the introduction background across the customer entrance screen layout.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[9px] text-zinc-500 uppercase font-bold text-mono tracking-wider">Hero Graphic Cover Photo URL Link</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="e.g. https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?w=1600&q=80"
+                  className="flex-1 bg-[#0a0a0a] border border-[#262626] hover:border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono"
+                  value={activeHeroUrl}
+                  onChange={e => setActiveHeroUrl(e.target.value)}
+                />
+                <button
+                  onClick={() => {
+                    onUpdateOpeningPhoto(activeHeroUrl);
+                    alert('Showroom landing cover picture synchronized instantly across the website.');
+                  }}
+                  className="px-4 py-2 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] text-xs font-bold uppercase rounded-lg transition"
+                >
+                  Save Aspect Photo
+                </button>
+              </div>
+              
+              <div className="pt-2">
+                <span className="text-[9px] text-zinc-500 uppercase block mb-1">Suggested high-definition aesthetic links:</span>
+                <div className="space-y-1">
+                  {[
+                    { label: 'Unsplash Sleek Dark Setup', url: 'https://images.unsplash.com/photo-1618477388954-7852f32655ec?w=1600&q=80' },
+                    { label: 'Unsplash Cozy Tech workspace', url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=1600&q=80' },
+                    { label: 'Unsplash Industrial cybercafe vibe', url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1600&q=80' }
+                  ].map(uOpt => (
+                    <button
+                      key={uOpt.url}
+                      onClick={() => setActiveHeroUrl(uOpt.url)}
+                      className="text-[10px] text-[#F5C518] underline hover:text-amber-300 block text-left"
+                    >
+                      {uOpt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: OPERATIONAL APPROVALS (General Manager Mode Only) */}
+      {activeTab === 'approvals' && userRole === 'manager' && (
+        <div className="space-y-4 text-left animate-fadeIn">
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+            <div>
+              <h4 className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest">📋 AUTHORIZATION FOR STAFF OPERATIONS (GM QUEUE)</h4>
+              <p className="text-[10.5px] text-zinc-500 mt-1">Review, authorize, or decline crucial operational adjustments drafted by staff members before they synchronized live with the platform’s production database.</p>
+            </div>
+
+            {requests.length === 0 ? (
+              <div className="p-8 text-center bg-zinc-950 border border-dashed border-[#262626] rounded-xl text-zinc-650">
+                <p className="text-xs font-mono">No operational requests filed. Full system sync green 🟢</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {requests.map(req => {
+                  const payloadStr = typeof req.payload === 'string' ? req.payload : JSON.stringify(req.payload, null, 2);
+                  return (
+                    <div 
+                      key={req.id} 
+                      className={`p-4 border rounded-xl space-y-3 transition-all ${
+                        req.status === 'pending' ? 'bg-amber-950/20 border-amber-900/40 shadow-sm' :
+                        req.status === 'approved' ? 'bg-emerald-950/15 border-emerald-900/30' :
+                        'bg-red-950/15 border-red-900/30'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <span className="text-[9px] px-1.5 py-0.5 bg-zinc-900 text-zinc-350 font-extrabold uppercase rounded border border-zinc-800">
+                            PROPOSED ACTIONS TYPE: {req.type.toUpperCase()}
+                          </span>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">{req.submittedAt ? req.submittedAt.split('T')[0] : 'Today'}</p>
+                        </div>
+                        <span className={`text-[9px] uppercase font-mono font-extrabold px-2 py-0.5 rounded border ${
+                          req.status === 'pending' ? 'bg-amber-950 text-amber-400 border-amber-800' :
+                          req.status === 'approved' ? 'bg-emerald-950 text-emerald-400 border-emerald-800' :
+                          'bg-red-950 text-red-400 border-red-800'
+                        }`}>
+                          {req.status}
+                        </span>
+                      </div>
+
+                      <div className="bg-black/70 p-3 rounded-lg border border-zinc-900 text-[10px] space-y-1 font-mono">
+                        <span className="text-zinc-500 block uppercase font-bold text-[8.5px]">Draft Proposal JSON:</span>
+                        <pre className="text-zinc-300 whitespace-pre-wrap leading-relaxed overflow-x-auto text-[9.5px]">
+                          {payloadStr}
+                        </pre>
+                      </div>
+
+                      <div className="space-y-1 bg-zinc-900/40 p-2.5 rounded-lg text-xs leading-normal">
+                        <span className="font-extrabold text-zinc-550 block text-[9px] uppercase">Staff Note/Justification:</span>
+                        <span className="text-zinc-300 italic">"{req.note || 'No notes supplied.'}"</span>
+                      </div>
+
+                      {req.managerComment && (
+                        <div className="space-y-1 bg-red-950/10 p-2.5 rounded-lg text-xs border border-red-950/20">
+                          <span className="font-extrabold text-red-400 block text-[9px] uppercase">Manager Response:</span>
+                          <span className="text-zinc-400">{req.managerComment}</span>
+                        </div>
+                      )}
+
+                      {req.status === 'pending' && (
+                        <div className="pt-2 border-t border-zinc-900/60 flex items-center justify-between gap-3">
+                          <input
+                            type="text"
+                            placeholder="Reason notes for rejection (e.g. Price too low)"
+                            className="flex-1 bg-[#0a0a0a] border border-[#262626] rounded-lg p-2 text-xs focus:outline-none"
+                            value={gmRejectNotes[req.id] || ''}
+                            onChange={e => {
+                              setGmRejectNotes({ ...gmRejectNotes, [req.id]: e.target.value });
+                            }}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                onRejectRequest(req.id, gmRejectNotes[req.id] || 'Declined by GM');
+                                alert('Operational adjustment declined.');
+                              }}
+                              className="px-3 py-1.5 bg-red-900 hover:bg-red-950 text-red-100 text-xs font-bold uppercase rounded-lg transition"
+                            >
+                              Decline
+                            </button>
+                            <button
+                              onClick={() => {
+                                onApproveRequest(req.id);
+                                alert('Operational action approved and applied to system logs instantly!');
+                              }}
+                              className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-bold uppercase rounded-lg transition"
+                            >
+                              Approve & Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: MY PROPOSALS & REQUESTS (Staff Mode Only) */}
+      {activeTab === 'proposals' && userRole === 'staff' && (
+        <div className="space-y-4 text-left animate-fadeIn">
+          {/* Submit new proposal */}
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4 font-sans">
+            <div>
+              <h4 className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest">📝 REQUEST OPERATION AUTHORIZATION FORM</h4>
+              <p className="text-[10.5px] text-zinc-505 mt-1">Wider operations like altering bank details, publishing deal promotions, or shifting cover hero graphics require direct authorization from the General Manager. Draft yours below:</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold font-mono tracking-wider">Adjustment Category Target</label>
+                  <select
+                    className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-xs text-white"
+                    value={propType}
+                    onChange={e => setPropType(e.target.value as any)}
+                  >
+                    <option value="deal">Add Deal Promotion</option>
+                    <option value="bank">Modify Receiving Bank Account</option>
+                    <option value="contacts">Update Hotlines / Contact Numbers</option>
+                    <option value="hero_cover">Change Homepage Landscape Cover</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2 bg-black/50 p-3 rounded-lg border border-zinc-900">
+                  <span className="text-[9px] text-[#F5C518] uppercase font-bold block mb-1">Target Action Draft Payload:</span>
+                  
+                  {propType === 'deal' && (
+                    <div className="space-y-2 text-[11px]">
+                      <input
+                        type="text"
+                        placeholder="Deal Title (e.g. HP ProBook Elite)"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="deal_t"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Orig Price (e.g. ₦350,000)"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="deal_orig"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Special Promo Price (e.g. ₦290,000)"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="deal_sale"
+                      />
+                    </div>
+                  )}
+
+                  {propType === 'bank' && (
+                    <div className="space-y-2 text-[11px]">
+                      <input
+                        type="text"
+                        placeholder="Receiving Bank Name"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="bank_b"
+                      />
+                      <input
+                        type="text"
+                        placeholder="New Account Number"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="bank_n"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Beneficiary Account Name"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="bank_a"
+                      />
+                    </div>
+                  )}
+
+                  {propType === 'contacts' && (
+                    <div className="space-y-2 text-[11px]">
+                      <input
+                        type="text"
+                        placeholder="Sales Direct Hotline (WhatsApp format)"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="cont_sales"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Coordinator WhatsApp Number"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100"
+                        id="cont_coor"
+                      />
+                    </div>
+                  )}
+
+                  {propType === 'hero_cover' && (
+                    <div className="space-y-2 text-[11px]">
+                      <input
+                        type="url"
+                        placeholder="New HQ Image Cover URL link"
+                        className="w-full bg-[#070707] border border-zinc-800 rounded p-1.5 text-zinc-100 font-mono text-[10px]"
+                        id="hero_u"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3.5 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-zinc-500 uppercase font-extrabold font-mono tracking-wider">Staff Justification / Business Reason</label>
+                  <textarea
+                    rows={4}
+                    placeholder="Provide explanatory details for the GM (e.g. customer requested discount / bank server down, using backup desk)"
+                    className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-xs text-zinc-150 placeholder-zinc-700 focus:outline-none focus:border-cyan-500"
+                    value={propStaffNotes}
+                    onChange={e => setPropStaffNotes(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!propStaffNotes.trim()) {
+                      alert('Justification notes for the GM are strictly requested.');
+                      return;
+                    }
+
+                    // Assemble payload
+                    let packedPayload: any = {};
+                    if (propType === 'deal') {
+                      packedPayload = {
+                        title: (document.getElementById('deal_t') as HTMLInputElement)?.value || 'Promo laptop model',
+                        origPrice: (document.getElementById('deal_orig') as HTMLInputElement)?.value || '₦0',
+                        salePrice: (document.getElementById('deal_sale') as HTMLInputElement)?.value || '₦0',
+                        badge: 'PROMO LAPTOP',
+                        desc: 'Special GM-authorized clearance flash promo'
+                      };
+                    } else if (propType === 'bank') {
+                      packedPayload = {
+                        bank: (document.getElementById('bank_b') as HTMLInputElement)?.value || 'Access Bank',
+                        accountNumber: (document.getElementById('bank_n') as HTMLInputElement)?.value || '',
+                        accountName: (document.getElementById('bank_a') as HTMLInputElement)?.value || ''
+                      };
+                    } else if (propType === 'contacts') {
+                      packedPayload = {
+                        sales: (document.getElementById('cont_sales') as HTMLInputElement)?.value || contactsSales,
+                        inventory: (document.getElementById('cont_coor') as HTMLInputElement)?.value || contactsInv
+                      };
+                    } else if (propType === 'hero_cover') {
+                      packedPayload = {
+                        url: (document.getElementById('hero_u') as HTMLInputElement)?.value || ''
+                      };
+                    }
+
+                    onCreateRequest(propType, packedPayload, propStaffNotes);
+                    setPropStaffNotes('');
+                    alert('Draft proposal submitted successfully. Track status below!');
+                  }}
+                  className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-[#0a0a0a] text-xs font-mono font-black uppercase rounded-lg transition"
+                >
+                  Submit Operational Proposal
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Proposals Queue Logger */}
+          <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3 font-sans">
+            <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-widest">My Filed Proposals Track Log ({requests.length})</h4>
+            {requests.length === 0 ? (
+              <p className="text-xs text-zinc-650 italic font-mono">No active operations requests filed by you yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {requests.map(req => (
+                  <div key={req.id} className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="font-bold text-[#F5C518] uppercase">Target category: {req.type}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase ${
+                        req.status === 'pending' ? 'bg-amber-950/50 text-amber-400 border border-amber-900/40' :
+                        req.status === 'approved' ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30' :
+                        'bg-red-950/50 text-red-400 border border-red-900/30'
+                      }`}>
+                        Status: {req.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 font-sans italic">"{req.note}"</p>
+                    {req.managerComment && (
+                      <p className="text-[10px] text-red-400 mt-2 font-mono leading-tight">GM Response: {req.managerComment}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
+}
+
+// Simple helpers to bypass local dynamic bindings inside compiled views safely
+function productsListMappingPlaceholderForCollageDirect(obj: any): any[] {
+  return [];
+}
+function productsListMappingPlaceholderForCollageDirectSecondary(): any[] {
+  return [];
 }

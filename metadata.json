@@ -1,6 +1,6 @@
 {
-  "name": "Remix: Hitech hublet ",
-  "description": "Hublet app for a digital tech company ",
+  "name": "HiTech Distributors",
+  "description": "Operations and commerce portal for HiTech Distributors",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

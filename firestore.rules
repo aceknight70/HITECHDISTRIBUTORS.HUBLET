@@ -111,5 +111,24 @@ service cloud.firestore {
       allow create, update: if isValidId(galleryId) && isValidGalleryPhoto(request.resource.data);
       allow delete: if isSignedIn() || (resource.data.isCustom == true);
     }
+
+    // Rule match block: Staff Operations / Authorization Requests
+    match /requests/{requestId} {
+      allow read: if true;
+      allow create, update: if isValidId(requestId);
+      allow delete: if true;
+    }
+
+    // Rule match block: App Settings Config
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Rule match block: Catalog Videos
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

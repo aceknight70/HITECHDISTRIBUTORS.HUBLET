@@ -162,6 +162,45 @@
         }
       },
       "required": ["id", "url", "label", "sub", "productCode", "price", "isCustom"]
+    },
+    "Request": {
+      "title": "Staff Operations Proposal",
+      "description": "An operations level proposal or authorization request created by staff for general manager approval.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "payload": { "type": "string" },
+        "status": { "type": "string" },
+        "staffNotes": { "type": "string" },
+        "managerNotes": { "type": "string" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["id", "type", "payload", "status", "staffNotes", "submittedAt"]
+    },
+    "AppConfig": {
+      "title": "Application Configuration",
+      "description": "Dynamic configurations for opening photo cover, live stream URL, and contacts.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "sales": { "type": "string" },
+        "inventory": { "type": "string" },
+        "general": { "type": "string" },
+        "gm": { "type": "string" }
+      }
+    },
+    "CatalogVideo": {
+      "title": "Catalog Video",
+      "description": "Short model video clips in the showcase catalog.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "duration": { "type": "string" }
+      },
+      "required": ["id", "title", "url"]
     }
   },
   "firestore": {
@@ -180,6 +219,18 @@
     "gallery/{galleryId}": {
       "schema": { "$ref": "#/entities/GalleryPhoto" },
       "description": "Live portfolio image cards for showcasing items."
+    },
+    "requests/{requestId}": {
+      "schema": { "$ref": "#/entities/Request" },
+      "description": "Operations requests and authorizations waiting for GM sign-off."
+    },
+    "app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppConfig" },
+      "description": "Dynamic key-value settings documents."
+    },
+    "videos/{videoId}": {
+      "schema": { "$ref": "#/entities/CatalogVideo" },
+      "description": "Showcase catalog short video recordings."
     }
   }
 }
