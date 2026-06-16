@@ -8,8 +8,10 @@ import {
   LayoutGrid, Image, Sun, Radio, Wrench, Tag, ListCollapse, FileText, Bot, 
   Contact as ContactIcon, ShieldCheck, MapPin, Star, ShieldAlert, Cpu, Landmark,
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
-  Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search
+  Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search, QrCode
 } from 'lucide-react';
+
+import QRCode from 'qrcode';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState } from './types';
 import { 
@@ -907,6 +909,63 @@ export default function App() {
     });
     return total;
   };
+
+  // Generate dynamic QR Code for the Invoice Checkout
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    if (standardCartItems.length === 0 && solarCartItems.length === 0) {
+      setQrCodeUrl('');
+      return;
+    }
+
+    const totalPrice = calculateTotalPrice();
+    const invCode = 'INV-DRAFT';
+    
+    let text = `⚡ HITECH DISTRIBUTORS STATEMENT ⚡\n`;
+    text += `Voucher Ref: ${invCode}\n`;
+    text += `Client: ${clientName || 'In-Shop Cash Customer'} (${clientPhone || 'No Contact'})\n`;
+    if (clientAddress) text += `Delivery Address: ${clientAddress}\n`;
+    text += `------------------------------------\n`;
+
+    standardCartItems.forEach(item => {
+      text += `· ${item.product?.n} x${item.qty} - ₦${(parseInt(item.product?.price.replace(/[^\d]/g, '') || '0') * item.qty).toLocaleString()}\n`;
+    });
+    solarCartItems.forEach(item => {
+      text += `· ${item.product?.n} x${item.qty} - ₦${(parseInt(item.product?.price.replace(/[^\d]/g, '') || '0') * item.qty).toLocaleString()}\n`;
+    });
+
+    text += `------------------------------------\n`;
+    text += `Grand Total: ₦${totalPrice.toLocaleString()}\n\n`;
+    text += `🏦 BANK DETAILS FOR DISPATCH:\n`;
+    text += `Bank: ${bankAccount.bank}\n`;
+    text += `Account No: ${bankAccount.accountNumber}\n`;
+    text += `Account Name: ${bankAccount.accountName}\n`;
+    text += `------------------------------------\n`;
+    text += `Scan to confirm with showroom team.`;
+
+    QRCode.toDataURL(text, {
+      margin: 1.5,
+      width: 320,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    })
+    .then(url => {
+      if (active) {
+        setQrCodeUrl(url);
+      }
+    })
+    .catch(err => {
+      console.error('Failed to generate dynamic invoice QR:', err);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [clientName, clientPhone, clientAddress, cart, solarCart, productsList, solarProductsList, bankAccount]);
 
   // WhatsApp helper
   const openWhatsAppLink = (number: string, text: string) => {
@@ -2129,6 +2188,44 @@ Message: ${quickMessageText}`;
                         <p className="text-[11px] text-zinc-400">Name: <span className="text-zinc-200">{bankAccount.accountName}</span></p>
                         <span className="text-[8px] text-zinc-500 italic uppercase block pt-1 border-t border-zinc-900">Configurable dynamically by our authorized staff only.</span>
                       </div>
+
+                      {/* DYNAMIC SCANNABLE INSTANT QR CODE */}
+                      {qrCodeUrl && (
+                        <div className="bg-[#0a0a0a] border border-[#262626] p-4 rounded-lg flex flex-col items-center justify-center space-y-2.5 text-center">
+                          <div className="flex items-center gap-1.5 text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
+                            <QrCode className="w-3.5 h-3.5 text-[#F5C518]" />
+                            <span>Instant Receipt QR Code</span>
+                          </div>
+                          
+                          <div className="relative p-2 bg-white rounded-lg inline-block shadow-lg">
+                            <img 
+                              src={qrCodeUrl} 
+                              alt="Invoice Statement QR Code" 
+                              className="w-36 h-36 select-none pointer-events-none shadow"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          
+                          <p className="text-[9px] text-zinc-500 uppercase font-bold leading-relaxed max-w-[280px]">
+                            Scan to instantly read prices, client data, and dispatch metadata in plain-text on any scanning tool.
+                          </p>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = qrCodeUrl;
+                              link.download = `hitech_invoice_${clientName ? clientName.toLowerCase().replace(/\s+/g, '_') : 'draft'}.png`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="text-[9px] text-[#F5C518] hover:underline font-mono font-bold uppercase tracking-widest transition"
+                          >
+                            [ Download QR Code PNG ]
+                          </button>
+                        </div>
+                      )}
 
                       <div className="flex gap-2 text-xs font-bold pt-1 uppercase">
                         <button 
