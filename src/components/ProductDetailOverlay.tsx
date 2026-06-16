@@ -136,6 +136,7 @@ export default function ProductDetailOverlay({
               alt={product.n} 
               className="w-full h-full object-cover"
               onError={(e) => {
+                e.currentTarget.onerror = null;
                 e.currentTarget.src = getDefaultProductImage(product);
               }}
             />

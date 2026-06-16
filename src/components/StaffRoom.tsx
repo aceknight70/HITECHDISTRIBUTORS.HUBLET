@@ -3115,6 +3115,7 @@ export default function StaffRoom({
                           alt="preview"
                           className="w-12 h-12 object-cover rounded-lg border border-[#262626]"
                           onError={(e) => {
+                            e.currentTarget.onerror = null;
                             if (diff.fallbackUrl && e.currentTarget.src !== diff.fallbackUrl) {
                               e.currentTarget.src = diff.fallbackUrl;
                             }

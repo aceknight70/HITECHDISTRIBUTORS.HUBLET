@@ -1562,6 +1562,10 @@ Message: ${quickMessageText}`;
                                         className="w-full h-full object-cover filter brightness-[0.85]" 
                                         loading="lazy" 
                                         referrerPolicy="no-referrer" 
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.src = "https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80";
+                                        }}
                                       />
                                     </div>
                                   );
@@ -1575,6 +1579,7 @@ Message: ${quickMessageText}`;
                                 loading="lazy"
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
+                                  e.currentTarget.onerror = null; // Prevent infinite loop on failure
                                   if (img.fallbackUrl && e.currentTarget.src !== img.fallbackUrl) {
                                     e.currentTarget.src = img.fallbackUrl;
                                   } else if (matchedProduct) {
