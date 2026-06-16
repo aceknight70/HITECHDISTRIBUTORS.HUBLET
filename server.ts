@@ -344,6 +344,36 @@ app.post('/api/upload', (req, res) => {
   }
 });
 
+// API Endpoint: DOWNLOAD COMPRESSED UPLOADS ARCHIVE
+app.get('/api/download-uploads', async (req, res) => {
+  try {
+    const AdmZip = (await import('adm-zip')).default;
+    const zip = new AdmZip();
+    
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      let count = 0;
+      files.forEach(file => {
+        const filePath = path.join(uploadsDir, file);
+        if (fs.statSync(filePath).isFile()) {
+          zip.addLocalFile(filePath);
+          count++;
+        }
+      });
+      console.log(`Zipped ${count} files from uploads directory.`);
+    }
+    
+    const zipBuffer = zip.toBuffer();
+    
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=hitech_uploads.zip');
+    res.send(zipBuffer);
+  } catch (error: any) {
+    console.error("ZIP formation failed: ", error);
+    res.status(500).json({ error: error.message || "Failed to generate download ZIP." });
+  }
+});
+
 // API Endpoint: PDF PARSER AND EXTRACTING INTEL
 app.post('/api/pdf/parse', async (req, res) => {
   try {

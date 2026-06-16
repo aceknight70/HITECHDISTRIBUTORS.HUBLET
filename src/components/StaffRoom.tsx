@@ -3005,6 +3005,57 @@ export default function StaffRoom({
             </div>
           </div>
 
+          {/* PRODUCTION SYNCHRONIZATION ADVISORY */}
+          <div className="bg-amber-950/20 border border-amber-500/30 p-4 rounded-xl space-y-3">
+            <div className="flex items-start gap-2.5">
+              <div className="p-1 px-1.5 bg-amber-500/10 text-[#F5C518] rounded-md font-mono text-xs font-black select-none">
+                GitHub Sync
+              </div>
+              <div className="flex-1 text-left">
+                <h5 className="text-[11px] font-mono font-bold text-amber-300 uppercase tracking-widest leading-tight">
+                  Why don't your newly uploaded photos show on hitechdistributors.hublet.cc yet?
+                </h5>
+                <p className="text-[10px] text-zinc-400 mt-1 uppercase font-bold leading-relaxed">
+                  The files you upload here exist inside Google AI Studio's isolated cloud development workspace container. Standard web deployments (such as Hublet or GitHub Pages) only access files committed to your <strong>GitHub repository</strong>.
+                </p>
+                
+                <div className="mt-2.5 p-2 bg-black/40 border border-zinc-900 rounded-lg space-y-2">
+                  <div className="text-[9px] font-mono font-bold text-zinc-400 uppercase">
+                    Select your preferred alignment flow (Option A or Option B):
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-left">
+                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1">
+                      <div className="text-[9px] font-mono font-black text-[#F5C518] uppercase">
+                        ✓ OPTION A: Quick Github Export
+                      </div>
+                      <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
+                        Click the <strong>Settings Icon (Gear)</strong> in the topmost right corner of this AI Studio environment, and click <strong>"Export to GitHub"</strong>. This directly commits and pushes all images in your <code>/uploads</code> directory to your repository, auto-redeploying your website instantly!
+                      </p>
+                    </div>
+
+                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1">
+                      <div className="text-[9px] font-mono font-black text-emerald-400 uppercase">
+                        ✓ OPTION B: Download Local ZIP Archive
+                      </div>
+                      <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
+                        Download a backup archive containing all <code>/uploads</code> images and commit them manually inside your repository's <code>uploads/</code> directory!
+                      </p>
+                      <button
+                        onClick={() => {
+                          window.open('/api/download-uploads', '_blank');
+                        }}
+                        className="mt-2 w-full py-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-[#0a0a0a] text-[9px] font-mono font-black uppercase rounded-md transition"
+                      >
+                        Download Uploads Archive (.zip)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* RESULTS COMPARISON AND DIFF LIST */}
           {matchingResults && (
             <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
