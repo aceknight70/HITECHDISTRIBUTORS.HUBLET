@@ -1357,7 +1357,7 @@ Message: ${quickMessageText}`;
   // Enter Showroom CTA
   const enterStore = () => {
     setView('main-app');
-    setCurrentRoom('showroom');
+    setCurrentRoom('gallery');
     setActiveCategory(null);
   };
 
@@ -1584,7 +1584,7 @@ Message: ${quickMessageText}`;
               onClick={enterStore}
               className="w-full py-3.5 bg-gradient-to-r from-[#CC0000] via-[#990000] to-[#CC0000] hover:scale-[1.02] transform transition-all shadow-xl font-bold uppercase text-xs tracking-wider border border-red-700/30 text-white rounded-lg flex items-center justify-center gap-1.5"
             >
-              Enter Showroom →
+              Enter Store →
             </button>
             <p className="text-[9px] text-zinc-500">
               6 Airport Road, Warri · Delta State, Nigeria · 08032175552
