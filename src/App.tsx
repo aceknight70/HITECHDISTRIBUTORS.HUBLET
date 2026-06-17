@@ -148,6 +148,101 @@ export default function App() {
     }
   };
 
+  const handleSaveGalleryPhoto = async (updatedPhoto: any) => {
+    if (updatedPhoto.isVirtual) {
+      // It's a virtual photo generated from product specifications, so update the source product!
+      const codeVal = updatedPhoto.productCode;
+      const matchedItem = [
+        ...productsList
+          .filter(p => p.pn && p.pn !== '—')
+          .map(p => ({
+            code: p.pn,
+            name: p.n,
+            spec: p.sp,
+            price: p.price,
+            desc: p.desc || '',
+            idVal: p.id,
+            type: 'standard' as const,
+            origin: p
+          })),
+        ...solarProductsList
+          .map(s => ({
+            code: s.id,
+            name: s.n,
+            spec: s.sp,
+            price: s.price,
+            desc: s.desc || '',
+            idVal: s.id,
+            type: 'solar' as const,
+            origin: s
+          }))
+      ].find(item => item.code === codeVal);
+
+      if (matchedItem) {
+        if (matchedItem.type === 'solar') {
+          const updatedProduct = {
+            ...matchedItem.origin,
+            n: updatedPhoto.label,
+            sp: updatedPhoto.sub,
+            price: updatedPhoto.price,
+            imageUrl: updatedPhoto.url
+          } as SolarProduct;
+          await handleSaveSolarProduct(updatedProduct);
+        } else {
+          const updatedProduct = {
+            ...matchedItem.origin,
+            n: updatedPhoto.label,
+            sp: updatedPhoto.sub,
+            price: updatedPhoto.price,
+            imageUrl: updatedPhoto.url
+          } as Product;
+          await handleSaveProduct(updatedProduct);
+        }
+        alert("✅ Source product specifications and showcase image updated successfully!");
+      } else {
+        alert("Could not find matching product code to bind specs to.");
+      }
+      return;
+    }
+
+    // Otherwise, update the dedicated gallery item
+    const nextPhotos = galleryPhotos.map(p => {
+      if (String(p.id) === String(updatedPhoto.id)) {
+        return {
+          id: String(updatedPhoto.id),
+          url: updatedPhoto.url,
+          fallbackUrl: updatedPhoto.fallbackUrl || updatedPhoto.url,
+          label: updatedPhoto.label,
+          sub: updatedPhoto.sub || '',
+          productCode: updatedPhoto.productCode || '',
+          price: updatedPhoto.price || '',
+          isCustom: !!updatedPhoto.isCustom
+        };
+      }
+      return p;
+    });
+    setGalleryPhotos(nextPhotos);
+    localStorage.setItem('ht_gallery_photos', JSON.stringify(nextPhotos));
+
+    try {
+      const docToSend = {
+        id: String(updatedPhoto.id),
+        url: updatedPhoto.url,
+        fallbackUrl: updatedPhoto.fallbackUrl || updatedPhoto.url,
+        label: updatedPhoto.label,
+        sub: updatedPhoto.sub || '',
+        productCode: updatedPhoto.productCode || '',
+        price: updatedPhoto.price || '',
+        isCustom: !!updatedPhoto.isCustom
+      };
+      await setDoc(doc(db, 'gallery', String(updatedPhoto.id)), docToSend);
+      alert("✅ Showcase gallery card updated successfully!");
+    } catch (err) {
+      console.warn("Failed to write edited gallery image:", err);
+      alert("⚠️ Offline: Saved changes locally.");
+    }
+  };
+
   // Staff Direct Mode states
   const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(() => {
     try {
@@ -706,14 +801,7 @@ export default function App() {
         // Dynamic self-healing seed synchronisation for new product catalog images
         const outOfSyncDefaults = GALLERY_PHOTOS.filter(defP => {
           const fetched = items.find(item => String(item.id) === String(defP.id));
-          if (!fetched) return true; // Missing entirely
-          // Check if any critical field has changed in the source file
-          return fetched.url !== defP.url ||
-                 fetched.label !== defP.label ||
-                 (fetched.sub || '') !== (defP.sub || '') ||
-                 (fetched.productCode || '') !== (defP.productCode || '') ||
-                 (fetched.price || '') !== (defP.price || '') ||
-                 fetched.isCustom !== (defP.isCustom || false);
+          return !fetched; // ONLY seed if missing entirely from database to prevent overwriting edits
         }).map(p => ({
           id: String(p.id),
           url: p.url,
@@ -2507,6 +2595,19 @@ Message: ${quickMessageText}`;
                                 {/* Delete Custom Photos directly. If staff, can modify or delete! */}
                                 {isStaffLoggedIn && (
                                   <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10 transition scale-95 group-hover:scale-100">
+                                    {/* Edit Showcase Photo fields */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingGallery(img);
+                                      }}
+                                      className="p-1.5 bg-zinc-900/90 border border-zinc-700 hover:bg-[#F5C518] hover:text-black font-bold text-zinc-100 rounded-lg transition-colors flex items-center shadow-lg"
+                                      title="Edit Showcase Card Details"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+
                                     {matchedProduct && (
                                       <button
                                         type="button"
@@ -2866,6 +2967,159 @@ Message: ${quickMessageText}`;
                           className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
                         >
                           Save Solar Configurations
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* EDIT GALLERY PHOTO CARD MODAL */}
+                  {editingGallery && (
+                    <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+                      <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
+                        <div className="flex justify-between items-center border-b border-[#212121] pb-2">
+                          <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">✏️ Edit showcase photo card</h3>
+                          <button type="button" onClick={() => setEditingGallery(null)} className="text-zinc-500 hover:text-zinc-350 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-3 text-[11px] max-h-[60vh] overflow-y-auto pr-1 scrollbar-none">
+                          {editingGallery.isVirtual && (
+                            <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg text-[9px] font-mono leading-normal">
+                              ℹ️ This photo is auto-generated from a product's main showcase photo. Editing will save back to its original product specifications page.
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Photo Card Title</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                              value={editingGallery.label || ''}
+                              onChange={e => setEditingGallery({ ...editingGallery, label: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Description / Subtitle Specs</label>
+                            <textarea 
+                              rows={3}
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700 cursor-text"
+                              value={editingGallery.sub || ''}
+                              onChange={e => setEditingGallery({ ...editingGallery, sub: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price / Overlay</label>
+                              <input 
+                                type="text" 
+                                placeholder="e.g. ₦1,250,000"
+                                className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                                value={editingGallery.price || ''}
+                                onChange={e => setEditingGallery({ ...editingGallery, price: e.target.value })}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Linked Product Code</label>
+                              <select 
+                                className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none"
+                                value={editingGallery.productCode || ''}
+                                onChange={e => setEditingGallery({ ...editingGallery, productCode: e.target.value })}
+                              >
+                                <option value="">-- Unlinked --</option>
+                                {allProductCodes.map(item => (
+                                  <option key={item.code} value={item.code}>
+                                    {item.code} ({item.name.slice(0, 15)}...)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {!editingGallery.isVirtual && (
+                            <div>
+                              <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Exhibition Feed Category</label>
+                              <select 
+                                className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none"
+                                value={editingGallery.isCustom ? "custom" : "showcase"}
+                                onChange={e => setEditingGallery({ ...editingGallery, isCustom: e.target.value === "custom" })}
+                              >
+                                <option value="showcase">Store Showcase (Official)</option>
+                                <option value="custom">Product Code Photo (Custom Exhibit)</option>
+                              </select>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Image URL / Sourcing</label>
+                            <input 
+                              type="text" 
+                              placeholder="Paste custom secure URL link..."
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-300 font-mono text-[10px] outline-none focus:border-zinc-700 mb-2"
+                              value={editingGallery.url || ''}
+                              onChange={e => setEditingGallery({ ...editingGallery, url: e.target.value })}
+                            />
+
+                            <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-900 p-2 rounded">
+                              {editingGallery.url ? (
+                                <img src={editingGallery.url} className="w-12 h-12 object-cover rounded border border-zinc-800" />
+                              ) : (
+                                <div className="w-12 h-12 flex items-center justify-center bg-zinc-900 border border-zinc-850 rounded text-zinc-500">
+                                  <Image className="w-5 h-5" />
+                                </div>
+                              )}
+                              <label className="flex-1 py-1.5 px-3 bg-zinc-900 border border-zinc-855 hover:bg-zinc-800 text-[#F5C518] hover:text-amber-400 text-[10px] font-extrabold uppercase text-center rounded cursor-pointer transition flex items-center justify-center gap-1.5 font-sans">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Upload New File</span>
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  className="hidden" 
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const reader = new FileReader();
+                                      reader.onload = async () => {
+                                        try {
+                                          const dataUrl = reader.result as string;
+                                          const compressed = await compressImage(dataUrl);
+                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          setEditingGallery({ ...editingGallery, url: finalUrl, fallbackUrl: compressed });
+                                          alert("📷 Photo uploaded!");
+                                        } catch (innerErr: any) {
+                                          alert("Upload error: " + innerErr.message);
+                                        }
+                                      };
+                                      reader.readAsDataURL(file);
+                                    } catch (err: any) {
+                                      alert("Upload failed: " + err.message);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!editingGallery.label || !editingGallery.label.trim()) {
+                              return alert("Title is required!");
+                            }
+                            if (!editingGallery.url || !editingGallery.url.trim()) {
+                              return alert("Image URL is required!");
+                            }
+                            await handleSaveGalleryPhoto(editingGallery);
+                            setEditingGallery(null);
+                          }}
+                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
+                        >
+                          Apply Showcase Changes
                         </button>
                       </div>
                     </div>
