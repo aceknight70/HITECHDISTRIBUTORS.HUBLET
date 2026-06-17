@@ -21,6 +21,7 @@ import {
 import SolarSizingTool from './components/SolarSizingTool';
 import InfoBoothRoom from './components/InfoBoothRoom';
 import StaffRoom from './components/StaffRoom';
+import { HTVideoPlayer } from './components/HTVideoPlayer';
 import ProductDetailOverlay, { getDefaultProductImage } from './components/ProductDetailOverlay';
 import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsService';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -3908,24 +3909,12 @@ Message: ${quickMessageText}`;
                           </div>
 
                           {/* Video Player Frame */}
-                          <div className="aspect-video w-full bg-black relative flex items-center justify-center">
-                            {isYoutube ? (
-                              <iframe
-                                src={`${embedUrl}?autoplay=1`}
-                                title={playingVideo.title}
-                                className="absolute inset-0 w-full h-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                              ></iframe>
-                            ) : (
-                              <video
-                                src={playingVideo.url}
-                                controls
-                                autoPlay
-                                playsInline
-                                className="w-full h-full object-contain"
-                              />
-                            )}
+                          <div className="w-full bg-black relative flex items-center justify-center p-2 rounded-xl">
+                            <HTVideoPlayer
+                              videoUrl={playingVideo.url}
+                              title={playingVideo.title}
+                              thumbnail={playingVideo.thumbnail}
+                            />
                           </div>
 
                           {/* Modal Details Footer */}
