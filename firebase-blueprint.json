@@ -205,6 +205,94 @@
         "duration": { "type": "string" }
       },
       "required": ["id", "title", "url"]
+    },
+    "Product": {
+      "title": "Product Item",
+      "description": "Standard inventory product item.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Unique product ID."
+        },
+        "pn": {
+          "type": "string",
+          "description": "Part number or model number."
+        },
+        "cat": {
+          "type": "string",
+          "description": "Category ID."
+        },
+        "n": {
+          "type": "string",
+          "description": "Product name."
+        },
+        "sp": {
+          "type": "string",
+          "description": "Short specifications."
+        },
+        "price": {
+          "type": "string",
+          "description": "Price representation."
+        },
+        "promo": {
+          "type": "boolean",
+          "description": "Special promotion status."
+        },
+        "newp": {
+          "type": "boolean",
+          "description": "New product highlight."
+        },
+        "desc": {
+          "type": "string",
+          "description": "Deep product description."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional product image URL."
+        }
+      },
+      "required": ["id", "pn", "cat", "n", "sp", "price", "desc"]
+    },
+    "SolarProduct": {
+      "title": "Solar Product",
+      "description": "Solar equipment inventory product.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique solar product ID."
+        },
+        "cat": {
+          "type": "string",
+          "description": "Solar category (e.g., Inverters, Lithium Batteries, etc.)."
+        },
+        "n": {
+          "type": "string",
+          "description": "Product name."
+        },
+        "brand": {
+          "type": "string",
+          "description": "Brand name."
+        },
+        "sp": {
+          "type": "string",
+          "description": "Short specifications."
+        },
+        "price": {
+          "type": "string",
+          "description": "Price representation."
+        },
+        "desc": {
+          "type": "string",
+          "description": "Deep product description."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional product image URL."
+        }
+      },
+      "required": ["id", "cat", "n", "brand", "sp", "price"]
     }
   },
   "firestore": {
@@ -235,6 +323,14 @@
     "videos/{videoId}": {
       "schema": { "$ref": "#/entities/CatalogVideo" },
       "description": "Showcase catalog short video recordings."
+    },
+    "products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Standard store products inventory."
+    },
+    "solar_products/{solarProductId}": {
+      "schema": { "$ref": "#/entities/SolarProduct" },
+      "description": "Solar backup power equipment."
     }
   }
 }

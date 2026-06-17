@@ -199,22 +199,19 @@ export default function App() {
           list.push(docSnap.data() as Product);
         });
         if (list.length > 0) {
-          setProductsList(prev => {
-            const merged = [...prev];
-            list.forEach(item => {
-              const idx = merged.findIndex(p => p.id === item.id);
-              if (idx >= 0) {
-                merged[idx] = item;
-              } else {
-                merged.push(item);
-              }
+          list.sort((a, b) => a.id - b.id);
+          setProductsList(list);
+          localStorage.setItem('ht_products', JSON.stringify(list));
+        } else {
+          // Empty on Firestore – seed initial PRODS
+          PRODS.forEach((p) => {
+            setDoc(doc(db, 'products', String(p.id)), p).catch((e) => {
+              console.warn("Seeding product failed: ", e);
             });
-            localStorage.setItem('ht_products', JSON.stringify(merged));
-            return merged;
           });
         }
       }, (err) => {
-        console.warn("Products sync notice (operating locally): ", err);
+        handleFirestoreError(err, OperationType.GET, 'products');
       });
 
       unsubS = onSnapshot(collection(db, 'solar_products'), (snapshot) => {
@@ -223,22 +220,18 @@ export default function App() {
           list.push(docSnap.data() as SolarProduct);
         });
         if (list.length > 0) {
-          setSolarProductsList(prev => {
-            const merged = [...prev];
-            list.forEach(item => {
-              const idx = merged.findIndex(s => s.id === item.id);
-              if (idx >= 0) {
-                merged[idx] = item;
-              } else {
-                merged.push(item);
-              }
+          setSolarProductsList(list);
+          localStorage.setItem('ht_solar_products', JSON.stringify(list));
+        } else {
+          // Empty on Firestore – seed initial SOLAR
+          SOLAR.forEach((s) => {
+            setDoc(doc(db, 'solar_products', s.id), s).catch((e) => {
+              console.warn("Seeding solar product failed: ", e);
             });
-            localStorage.setItem('ht_solar_products', JSON.stringify(merged));
-            return merged;
           });
         }
       }, (err) => {
-        console.warn("Solar products sync notice (operating locally): ", err);
+        handleFirestoreError(err, OperationType.GET, 'solar_products');
       });
     } catch (e) {
       console.warn("Snapshots setup failed: ", e);
@@ -873,14 +866,54 @@ export default function App() {
     localStorage.setItem('ht_solar_cart', JSON.stringify(updatedSolarCart));
   };
 
-  const handleUpdateProducts = (updatedProds: Product[]) => {
+  const handleUpdateProducts = async (updatedProds: Product[]) => {
     setProductsList(updatedProds);
-    localStorage.setItem('ht_prods', JSON.stringify(updatedProds));
+    localStorage.setItem('ht_products', JSON.stringify(updatedProds));
+
+    const currentIds = productsList.map(p => String(p.id));
+    const nextIds = updatedProds.map(p => String(p.id));
+    const toDelete = currentIds.filter(id => !nextIds.includes(id));
+
+    for (const deleteId of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'products', deleteId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `products/${deleteId}`);
+      }
+    }
+
+    for (const prod of updatedProds) {
+      try {
+        await setDoc(doc(db, 'products', String(prod.id)), prod);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `products/${prod.id}`);
+      }
+    }
   };
 
-  const handleUpdateSolarProducts = (updatedSolars: SolarProduct[]) => {
+  const handleUpdateSolarProducts = async (updatedSolars: SolarProduct[]) => {
     setSolarProductsList(updatedSolars);
-    localStorage.setItem('ht_solar', JSON.stringify(updatedSolars));
+    localStorage.setItem('ht_solar_products', JSON.stringify(updatedSolars));
+
+    const currentIds = solarProductsList.map(s => s.id);
+    const nextIds = updatedSolars.map(s => s.id);
+    const toDelete = currentIds.filter(id => !nextIds.includes(id));
+
+    for (const deleteId of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'solar_products', deleteId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `solar_products/${deleteId}`);
+      }
+    }
+
+    for (const solar of updatedSolars) {
+      try {
+        await setDoc(doc(db, 'solar_products', solar.id), solar);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `solar_products/${solar.id}`);
+      }
+    }
   };
 
   const handleUpdateRepairs = async (updatedRepairs: RepairRecord[]) => {
