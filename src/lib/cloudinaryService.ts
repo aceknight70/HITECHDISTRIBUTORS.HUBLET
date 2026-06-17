@@ -74,16 +74,24 @@ export async function uploadImageToCDNOrLocal(
 
   // Local static server /api/upload fallback
   console.log(`[Upload Fallback] Uploading ${filename} to local container server...`);
-  const uploadRes = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, base64Data })
-  });
+  try {
+    const uploadRes = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, base64Data })
+    });
 
-  if (!uploadRes.ok) {
-    throw new Error(`Local Express upload failed with status ${uploadRes.status}`);
+    if (uploadRes.ok) {
+      const uploadData = await uploadRes.json();
+      if (uploadData && uploadData.url) {
+        return uploadData.url;
+      }
+    }
+    
+    console.warn(`[Upload Fallback] Local server responded with status ${uploadRes.status}. Falling back to storing Base64 Data URL directly.`);
+    return base64Data;
+  } catch (err: any) {
+    console.warn("[Upload Fallback] Local server unreachable. Falling back to storing Base64 Data URL directly. Details: ", err?.message || err);
+    return base64Data;
   }
-
-  const uploadData = await uploadRes.json();
-  return uploadData.url;
 }
