@@ -9,7 +9,7 @@ import {
   Contact as ContactIcon, ShieldCheck, MapPin, Star, ShieldAlert, Cpu, Landmark,
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
-  Edit, Pencil, Lock, Unlock, Check, X
+  Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink
 } from 'lucide-react';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState } from './types';
@@ -30,9 +30,11 @@ import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
 export default function App() {
   // Navigation: "landing" | "main-app"
   const [view, setView] = useState<'landing' | 'main-app'>('landing');
-  const [currentRoom, setCurrentRoom] = useState<string>('showroom');
+  const [currentRoom, setCurrentRoom] = useState<string>('gallery');
   const [activeCategory, setActiveCategory] = useState<string | null>(null); // for Showroom item collection
   const [solarFilter, setSolarFilter] = useState<string>('All');
+  const [videoSearchQuery, setVideoSearchQuery] = useState<string>('');
+  const [videoCategoryFilter, setVideoCategoryFilter] = useState<string>('All');
 
   // Typewriter HITECH landing letters
   const [typewriterLetters, setTypewriterLetters] = useState<string[]>([]);
@@ -3354,6 +3356,174 @@ Message: ${quickMessageText}`;
               );
             })()}
 
+            {/* ROOM 2B: DYNAMIC VIDEO GALLERY */}
+            {currentRoom === 'videogallery' && (() => {
+              const getYouTubeEmbedUrl = (urlStr: string) => {
+                if (!urlStr) return '';
+                if (urlStr.includes('/embed/')) return urlStr;
+                
+                let videoId = '';
+                try {
+                  const trimmed = urlStr.trim();
+                  if (trimmed.includes('youtu.be/')) {
+                    videoId = trimmed.split('youtu.be/')[1]?.split(/[?#]/)[0] || '';
+                  } else if (trimmed.includes('v=')) {
+                    videoId = trimmed.split('v=')[1]?.split('&')[0]?.split(/[?#]/)[0] || '';
+                  } else if (trimmed.includes('embed/')) {
+                    videoId = trimmed.split('embed/')[1]?.split(/[?#]/)[0] || '';
+                  } else if (trimmed.length === 11) {
+                    videoId = trimmed;
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+                
+                return videoId ? `https://www.youtube.com/embed/${videoId}` : urlStr;
+              };
+
+              const filteredVideos = galleryVideos.filter(vid => {
+                const matchesCategory = videoCategoryFilter === 'All' || vid.category === videoCategoryFilter;
+                if (!videoSearchQuery.trim()) return matchesCategory;
+                const query = videoSearchQuery.toLowerCase();
+                const matchesSearch = 
+                  vid.title?.toLowerCase().includes(query) || 
+                  (vid.category || '').toLowerCase().includes(query);
+                return matchesCategory && matchesSearch;
+              });
+
+              const allCategories = ['All', ...Array.from(new Set(galleryVideos.map(v => v.category || 'Product Demo')))];
+
+              return (
+                <div className="p-4 space-y-4 animate-fade-in text-left font-sans">
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl text-center">
+                    <h2 className="text-xs font-mono uppercase text-[#F5C518] font-bold tracking-[0.2em] flex items-center justify-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-[#F5C518] rounded-full animate-ping"></span>
+                      Video Gallery
+                    </h2>
+                    <p className="text-md font-serif font-bold text-[#f5f5f5] mt-1">
+                      Authorized Technical Clips & Custom Walkarounds
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-sans mt-0.5">
+                      Watch real-time live tests, systems demonstrations, and diagnostic walkarounds.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#121212] border border-[#212121] rounded-xl p-3.5 space-y-3 shadow-md">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
+                      <input
+                        type="text"
+                        placeholder="Search technical videos..."
+                        value={videoSearchQuery}
+                        onChange={e => setVideoSearchQuery(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-700 py-1.5 pl-8 pr-8 rounded-lg text-xs text-zinc-100 placeholder-zinc-500 outline-none font-sans"
+                      />
+                      {videoSearchQuery && (
+                        <button
+                          onClick={() => setVideoSearchQuery('')}
+                          className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-350 text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex gap-1.5 text-[9px] uppercase font-bold overflow-x-auto scrollbar-none pb-1">
+                      {allCategories.map(cat => {
+                        const count = cat === 'All' 
+                          ? galleryVideos.length 
+                          : galleryVideos.filter(v => (v.category || 'Product Demo') === cat).length;
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setVideoCategoryFilter(cat)}
+                            className={`px-3 py-1.5 rounded-full border transition shrink-0 ${
+                              videoCategoryFilter === cat
+                                ? 'bg-[#F5C518] text-black font-extrabold border-[#F5C518]'
+                                : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:text-zinc-205'
+                            }`}
+                          >
+                            {cat} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {filteredVideos.length === 0 ? (
+                    <div className="bg-[#141414] border border-[#262626] p-8 text-center rounded-xl text-xs text-zinc-500 space-y-2">
+                      <Video className="w-8 h-8 text-zinc-700 mx-auto" />
+                      <p className="font-mono text-[10px] tracking-wider uppercase text-zinc-400">No clips matching current view</p>
+                      <p className="text-[9px] text-zinc-600 leading-normal max-w-sm mx-auto">
+                        There are currently no custom video recordings matched under this list. Authorized staff can register clips anytime via the "Staff Room" control dashboard.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredVideos.map(vid => {
+                        const embedUrl = getYouTubeEmbedUrl(vid.url);
+                        return (
+                          <div key={vid.id} className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-lg hover:border-zinc-700 transition duration-300 flex flex-col h-full">
+                            <div className="aspect-video w-full bg-black relative border-b border-zinc-900 group">
+                              {embedUrl ? (
+                                <iframe
+                                  src={embedUrl}
+                                  title={vid.title}
+                                  className="w-full h-full"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                ></iframe>
+                              ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-zinc-500 p-4 text-center">
+                                  <Video className="w-8 h-8 text-red-500/80 mb-2 animate-bounce" />
+                                  <p className="font-bold text-zinc-300">Invalid Media Source</p>
+                                  <p className="text-[10px] text-zinc-600 mt-1 max-w-xs">{vid.url}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="p-3.5 flex flex-col justify-between flex-1 space-y-3">
+                              <div className="space-y-1.5 text-left">
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-[#F5C518] text-[8px] font-mono font-extrabold uppercase rounded tracking-wider">
+                                    {vid.category || 'Product Demo'}
+                                  </span>
+                                </div>
+                                <h3 className="text-xs font-bold text-zinc-200 leading-snug line-clamp-2">
+                                  {vid.title}
+                                </h3>
+                              </div>
+
+                              <div className="pt-2 border-t border-zinc-900 flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openWhatsAppLink(contacts.sales, `Hello! I watched the video "${vid.title}" inside your Video Gallery and would like to register my inquiry/order details concerning it.`)}
+                                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 hover:text-white text-white rounded-lg text-[10px] font-bold font-sans uppercase tracking-wider transition flex items-center justify-center gap-1.5"
+                                >
+                                  <Send className="w-3 h-3 text-white" />
+                                  <span>WhatsApp Inquiry</span>
+                                </button>
+                                <a
+                                  href={vid.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-lg flex items-center justify-center transition"
+                                  title="Open in YouTube"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* ROOM 3: SOLAR HUB & SMART CALCULATOR */}
             {currentRoom === 'solar' && (
               <div className="p-4 space-y-4">
@@ -4220,14 +4390,15 @@ Message: ${quickMessageText}`;
           {/* FIXED BOTTOM NAVIGATION BAR BAR */}
           <nav id="nav" className="fixed bottom-0 left-0 bg-[#0a0a0a] border-t border-[#262626] w-full flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0">
             {[
-              { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },
+              { id: 'videogallery', label: 'Video Gallery', icon: <Video className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'invoice', label: 'Invoice', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },
               { id: 'solar', label: 'Solar', icon: <Sun className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'channels', label: 'Channels', icon: <Radio className="w-4 h-4" /> },
               { id: 'repair', label: 'Repair', icon: <Wrench className="w-4 h-4" /> },
               { id: 'deals', label: 'Deals', icon: <Tag className="w-4 h-4" /> },
               { id: 'livesheet', label: 'Live', icon: <ListCollapse className="w-4 h-4" /> },
-              { id: 'invoice', label: 'Invoice', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },
               { id: 'info', label: 'AI', icon: <Bot className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'manager', label: 'Manager', icon: <ContactIcon className="w-4 h-4" /> },
               { id: 'shadow', label: 'Shadow', icon: <ShieldCheck className="w-4 h-4" /> },
