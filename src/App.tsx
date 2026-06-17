@@ -10,7 +10,7 @@ import {
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
   Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink,
-  LifeBuoy, HelpCircle, Phone
+  LifeBuoy, HelpCircle, Phone, Clock, Calendar
 } from 'lucide-react';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket } from './types';
@@ -273,6 +273,130 @@ export default function App() {
   const [directPinInput, setDirectPinInput] = useState<string>('');
   const [directLoginError, setDirectLoginError] = useState<string>('');
   const [directUploading, setDirectUploading] = useState<boolean>(false);
+
+  const [playingVideo, setPlayingVideo] = useState<any | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
+  const [uploadVideoProgress, setUploadVideoProgress] = useState<string>('');
+  const videoFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const generateThumbnailAndDuration = (file: File): Promise<{ thumbnailBase64: string, durationStr: string }> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      const objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
+      
+      const timeoutId = setTimeout(() => {
+        resolve({ thumbnailBase64: '', durationStr: '0:45' });
+      }, 5000);
+
+      video.onloadedmetadata = () => {
+        const totalSeconds = video.duration || 0;
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        const durationStr = `${minutes}:${String(seconds).padStart(2, '0')}`;
+        
+        video.currentTime = Math.min(1.0, totalSeconds / 2 || 0.5);
+        
+        video.onseeked = () => {
+          clearTimeout(timeoutId);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 320;
+            canvas.height = video.videoHeight || 180;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataURL = canvas.toDataURL('image/jpeg', 0.7);
+              resolve({ thumbnailBase64: dataURL, durationStr });
+            } else {
+              resolve({ thumbnailBase64: '', durationStr });
+            }
+          } catch (e) {
+            resolve({ thumbnailBase64: '', durationStr });
+          }
+          URL.revokeObjectURL(objectUrl);
+        };
+      };
+
+      video.onerror = () => {
+        clearTimeout(timeoutId);
+        resolve({ thumbnailBase64: '', durationStr: '0:45' });
+        URL.revokeObjectURL(objectUrl);
+      };
+    });
+  };
+
+  const handleVideoUploadSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const guessedTitle = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+    const userTitle = window.prompt("Enter a title for this video walkthrough:", guessedTitle);
+    if (userTitle === null) return;
+    const title = userTitle.trim() || guessedTitle;
+
+    setIsUploadingVideo(true);
+    setUploadVideoProgress("Analyzing video specifications & generating custom thumbnail...");
+
+    try {
+      const { thumbnailBase64, durationStr } = await generateThumbnailAndDuration(file);
+
+      setUploadVideoProgress("Transferring video package directly to storage server...");
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const videoBase64 = event.target?.result as string;
+        if (!videoBase64) {
+          throw new Error("Unable to read video file stream data");
+        }
+
+        try {
+          const videoUrl = await uploadImageToCDNOrLocal(file.name, videoBase64, cloudinaryConfig);
+
+          let thumbnailUrl = '';
+          if (thumbnailBase64) {
+            setUploadVideoProgress("Registering custom snapshot poster banner...");
+            thumbnailUrl = await uploadImageToCDNOrLocal(`thumb_${Date.now()}.jpg`, thumbnailBase64, cloudinaryConfig);
+          }
+
+          const payload = {
+            url: videoUrl,
+            title: title,
+            duration: durationStr || '0:45',
+            thumbnail: thumbnailUrl || 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80',
+            category: 'Short Demo',
+            desc: `User uploaded walkthrough of ${title}.`,
+            uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+          };
+
+          await handleAddVideo(payload);
+          alert("🎥 Video successfully uploaded and registered in the catalog!");
+        } catch (innerErr: any) {
+          alert("Upload failed: " + innerErr.message);
+        } finally {
+          setIsUploadingVideo(false);
+          setUploadVideoProgress("");
+          if (e.target) e.target.value = '';
+        }
+      };
+
+      reader.onerror = () => {
+        alert("Error reading file stream.");
+        setIsUploadingVideo(false);
+        setUploadVideoProgress("");
+      };
+
+      reader.readAsDataURL(file);
+
+    } catch (err: any) {
+      alert("Failure initiating video upload: " + err.message);
+      setIsUploadingVideo(false);
+      setUploadVideoProgress("");
+    }
+  };
 
   useEffect(() => {
     const handleSync = () => {
@@ -3547,19 +3671,67 @@ Message: ${quickMessageText}`;
 
               return (
                 <div className="p-4 space-y-4 animate-fade-in text-left font-sans">
-                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl text-center">
-                    <h2 className="text-xs font-mono uppercase text-[#F5C518] font-bold tracking-[0.2em] flex items-center justify-center gap-1.5">
-                      <span className="w-1.5 h-1.5 bg-[#F5C518] rounded-full animate-ping"></span>
-                      Video Gallery
-                    </h2>
-                    <p className="text-md font-serif font-bold text-[#f5f5f5] mt-1">
-                      Authorized Technical Clips & Custom Walkarounds
-                    </p>
-                    <p className="text-[10px] text-zinc-500 font-sans mt-0.5">
-                      Watch real-time live tests, systems demonstrations, and diagnostic walkarounds.
-                    </p>
+                  {/* Header Area with Upload CTA */}
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-center md:text-left">
+                    <div>
+                      <h2 className="text-[#F5C518] text-xs font-mono uppercase font-bold tracking-[0.2em] flex items-center justify-center md:justify-start gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-[#F5C518] rounded-full animate-ping"></span>
+                        Video Gallery
+                      </h2>
+                      <p className="text-md font-serif font-bold text-[#f5f5f5] mt-1">
+                        Authorized Technical Clips & Custom Walkaround Demos
+                      </p>
+                      <p className="text-[10px] text-zinc-500 font-sans mt-0.5">
+                        Watch real-time live tests, systems demonstrations, and diagnostic walkarounds.
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 justify-center">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        ref={videoFileInputRef}
+                        onChange={handleVideoUploadSelect}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          videoFileInputRef.current?.click();
+                        }}
+                        disabled={isUploadingVideo}
+                        className="px-4 py-2 bg-[#F5C518] active:scale-95 text-black font-extrabold text-[11px] font-mono tracking-widest uppercase rounded-lg hover:bg-amber-400 transition-all flex items-center justify-center gap-1.5 shadow-lg border border-[#F5C518]/20 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isUploadingVideo ? (
+                          <>
+                            <span className="inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                            <span>UPLOADING...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5 text-black" />
+                            <span>UPLOAD VIDEO</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Active Uploading Status Block */}
+                  {isUploadingVideo && (
+                    <div className="bg-zinc-950 border border-amber-500/30 p-3.5 rounded-xl text-left space-y-1.5 animate-pulse">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-amber-400 font-bold">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></span>
+                          <span>ACTIVE VIDEO SERVICE UPLOADER</span>
+                        </div>
+                        <span>SECURE LINK COALITION</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-300 font-sans font-medium">{uploadVideoProgress || 'Uploading and generating video assets...'}</p>
+                    </div>
+                  )}
+
+                  {/* Search and Filters */}
                   <div className="bg-[#121212] border border-[#212121] rounded-xl p-3.5 space-y-3 shadow-md">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
@@ -3603,68 +3775,102 @@ Message: ${quickMessageText}`;
                     </div>
                   </div>
 
+                  {/* Videos Grid */}
                   {filteredVideos.length === 0 ? (
                     <div className="bg-[#141414] border border-[#262626] p-8 text-center rounded-xl text-xs text-zinc-500 space-y-2">
                       <Video className="w-8 h-8 text-zinc-700 mx-auto" />
                       <p className="font-mono text-[10px] tracking-wider uppercase text-zinc-400">No clips matching current view</p>
                       <p className="text-[9px] text-zinc-600 leading-normal max-w-sm mx-auto">
-                        There are currently no custom video recordings matched under this list. Authorized staff can register clips anytime via the "Staff Room" control dashboard.
+                        There are currently no custom video recordings matched under this list. Choose "Upload Video" to add walks and operations walkthrough recordings.
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredVideos.map(vid => {
                         const embedUrl = getYouTubeEmbedUrl(vid.url);
+                        const isYoutube = !!embedUrl;
+                        const videoIdFromYoutube = embedUrl ? (embedUrl.split('/embed/')[1]?.split(/[?#]/)[0] || '') : '';
+                        const cardThumbnail = vid.thumbnail || (isYoutube && videoIdFromYoutube ? `https://img.youtube.com/vi/${videoIdFromYoutube}/hqdefault.jpg` : 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80');
+
                         return (
-                          <div key={vid.id} className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-lg hover:border-zinc-700 transition duration-300 flex flex-col h-full">
-                            <div className="aspect-video w-full bg-black relative border-b border-zinc-900 group">
-                              {embedUrl ? (
-                                <iframe
-                                  src={embedUrl}
-                                  title={vid.title}
-                                  className="w-full h-full"
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                ></iframe>
-                              ) : (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-zinc-500 p-4 text-center">
-                                  <Video className="w-8 h-8 text-red-500/80 mb-2 animate-bounce" />
-                                  <p className="font-bold text-zinc-300">Invalid Media Source</p>
-                                  <p className="text-[10px] text-zinc-600 mt-1 max-w-xs">{vid.url}</p>
+                          <div key={vid.id} className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-lg hover:border-zinc-700 transition duration-300 flex flex-col h-full relative group">
+                            
+                            {/* Video Thumbnail with Play Button overlay */}
+                            <div 
+                              onClick={() => setPlayingVideo(vid)}
+                              className="aspect-video w-full bg-black relative border-b border-zinc-900 overflow-hidden cursor-pointer group/thumb flex items-center justify-center"
+                            >
+                              <img 
+                                src={cardThumbnail} 
+                                alt={vid.title}
+                                className="w-full h-full object-cover filter brightness-[0.75] group-hover/thumb:scale-105 transition duration-500"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.src = "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80";
+                                }}
+                              />
+                              {/* Central Play Button */}
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover/thumb:bg-black/50 transition duration-300">
+                                <div className="w-12 h-12 rounded-full bg-amber-500/90 text-black flex items-center justify-center shadow-2xl transform scale-95 group-hover/thumb:scale-105 group-hover/thumb:bg-[#F5C518] transition duration-300">
+                                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                                </div>
+                              </div>
+                              
+                              {/* Duration indicator badge */}
+                              {vid.duration && (
+                                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/85 text-[9px] font-mono font-bold text-zinc-300 rounded tracking-wider flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-[#F5C518]" />
+                                  <span>{vid.duration}</span>
                                 </div>
                               )}
                             </div>
 
+                            {/* Card Content Details */}
                             <div className="p-3.5 flex flex-col justify-between flex-1 space-y-3">
                               <div className="space-y-1.5 text-left">
-                                <div className="flex justify-between items-start gap-2">
+                                <div className="flex justify-between items-center gap-2">
                                   <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-[#F5C518] text-[8px] font-mono font-extrabold uppercase rounded tracking-wider">
                                     {vid.category || 'Product Demo'}
                                   </span>
+                                  <span className="text-[10px] text-zinc-500 flex items-center gap-1 font-sans">
+                                    <Calendar className="w-3.5 h-3.5 text-zinc-650" />
+                                    <span>Uploaded: {vid.uploadedAt || '16 Jun 2026'}</span>
+                                  </span>
                                 </div>
-                                <h3 className="text-xs font-bold text-zinc-200 leading-snug line-clamp-2">
-                                  {vid.title}
+                                
+                                <h3 className="text-xs font-bold text-zinc-200 leading-snug line-clamp-2 mt-1">
+                                  📹 {vid.title}
                                 </h3>
+
+                                <div className="text-[10px] text-zinc-500 flex items-center gap-1 font-sans">
+                                  <Clock className="w-3.5 h-3.5 text-zinc-650" />
+                                  <span>Duration: {vid.duration || '2:30'}</span>
+                                </div>
                               </div>
 
                               <div className="pt-2 border-t border-zinc-900 flex gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => openWhatsAppLink(contacts.sales, `Hello! I watched the video "${vid.title}" inside your Video Gallery and would like to register my inquiry/order details concerning it.`)}
-                                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 hover:text-white text-white rounded-lg text-[10px] font-bold font-sans uppercase tracking-wider transition flex items-center justify-center gap-1.5"
+                                  onClick={() => openWhatsAppLink(contacts.sales, `Hello! I watched the video "${vid.title}" (${vid.duration}) inside your Video Gallery and would like to register my inquiry/order details concerning it.`)}
+                                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-[#075e54] text-white rounded-lg text-[10px] font-bold font-sans uppercase tracking-wider transition flex items-center justify-center gap-1 cursor-pointer"
                                 >
                                   <Send className="w-3 h-3 text-white" />
                                   <span>WhatsApp Inquiry</span>
                                 </button>
-                                <a
-                                  href={vid.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-lg flex items-center justify-center transition"
-                                  title="Open in YouTube"
+
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Delete the video and card for "${vid.title}"?`)) {
+                                      await handleRemoveVideo(vid.id);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/50 border border-red-900/60 hover:text-white text-red-200 rounded-lg flex items-center justify-center transition cursor-pointer"
+                                  title="Delete video record"
                                 >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -3672,6 +3878,85 @@ Message: ${quickMessageText}`;
                       })}
                     </div>
                   )}
+
+                  {/* PLAYBACK POPUP LIGHTBOX MODAL */}
+                  {playingVideo && (() => {
+                    const embedUrl = getYouTubeEmbedUrl(playingVideo.url);
+                    const isYoutube = !!embedUrl;
+                    
+                    return (
+                      <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex justify-center items-center z-[100] p-4">
+                        <div className="bg-[#0e0e0e] border border-zinc-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative animate-scale-up flex flex-col">
+                          
+                          {/* Modal Header */}
+                          <div className="flex justify-between items-center border-b border-zinc-900 p-4">
+                            <div className="text-left space-y-0.5">
+                              <span className="px-1.5 py-0.5 bg-zinc-900 text-amber-400 text-[8px] font-mono uppercase rounded font-bold">
+                                {playingVideo.category || 'Product Walkthrough'}
+                              </span>
+                              <h3 className="text-xs font-bold text-zinc-100 line-clamp-1 mt-1">
+                                📹 {playingVideo.title}
+                              </h3>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => setPlayingVideo(null)} 
+                              className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-100 transition flex items-center justify-center cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Video Player Frame */}
+                          <div className="aspect-video w-full bg-black relative flex items-center justify-center">
+                            {isYoutube ? (
+                              <iframe
+                                src={`${embedUrl}?autoplay=1`}
+                                title={playingVideo.title}
+                                className="absolute inset-0 w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              ></iframe>
+                            ) : (
+                              <video
+                                src={playingVideo.url}
+                                controls
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-contain"
+                              />
+                            )}
+                          </div>
+
+                          {/* Modal Details Footer */}
+                          <div className="p-4 bg-[#0a0a0a] text-left border-t border-zinc-900 space-y-2">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[10px] font-mono text-zinc-400">
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-zinc-650" />
+                                <b>Uploaded:</b> {playingVideo.uploadedAt || '16 Jun 2026'}
+                              </span>
+                              {playingVideo.duration && (
+                                <span className="flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-zinc-650" />
+                                  <b>Duration:</b> {playingVideo.duration}
+                                </span>
+                              )}
+                              <span>
+                                <b>Stream Origin:</b> {isYoutube ? 'YouTube CDN Cloud Server' : 'HiTech Regional Hosting Server'}
+                              </span>
+                            </div>
+                            {playingVideo.desc && (
+                              <p className="text-[11px] text-zinc-500 leading-relaxed pt-1 font-sans">
+                                {playingVideo.desc}
+                              </p>
+                            )}
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               );
             })()}
