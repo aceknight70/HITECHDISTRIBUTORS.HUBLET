@@ -1522,7 +1522,7 @@ Message: ${quickMessageText}`;
   };
 
   return (
-    <div id="app" className="max-w-[430px] w-full min-h-screen mx-auto bg-[#0a0a0a] border-x border-[#262626] shadow-2xl relative flex flex-col overflow-x-hidden font-sans">
+    <div id="app" className="w-full min-h-screen bg-[#0d0d0d] relative flex flex-col overflow-x-hidden font-sans">
       
       {/* ----------------- LANDING PAGE ----------------- */}
       {view === 'landing' && (
@@ -4218,7 +4218,7 @@ Message: ${quickMessageText}`;
           </div>
 
           {/* FIXED BOTTOM NAVIGATION BAR BAR */}
-          <nav id="nav" className="fixed bottom-0 left-1/2 -translate-x-1/2 bg-[#0a0a0a] border-t border-[#262626] w-full max-w-[430px] flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0">
+          <nav id="nav" className="fixed bottom-0 left-0 bg-[#0a0a0a] border-t border-[#262626] w-full flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0">
             {[
               { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },

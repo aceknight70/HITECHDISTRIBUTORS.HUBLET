@@ -119,21 +119,21 @@ export default function ProductDetailOverlay({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm flex justify-center items-end z-50">
-      {/* Container max-width 430px match mobile feel */}
-      <div className="bg-[#141414] border-t border-[#262626] rounded-t-2xl w-full max-w-[430px] overflow-y-auto max-h-[85vh] p-5 shadow-2xl relative scrollbar-none animate-slide-up">
+    <div className="fixed inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm flex justify-center items-center z-50 p-4 md:p-6">
+      {/* Expanded product detail card: fills 90% screen width, capped at 600px */}
+      <div className="bg-[#141414] border border-[#262626] rounded-2xl w-full max-w-[600px] overflow-y-auto max-h-[90vh] p-6 md:p-8 shadow-2xl relative scrollbar-none animate-slide-up">
         {/* Close Button top-right */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-200 p-1 bg-zinc-950 border border-[#262626] rounded-full transition-colors"
+          className="absolute top-5 right-5 text-zinc-500 hover:text-zinc-200 p-1.5 bg-zinc-950 border border-[#262626] rounded-full transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
         {/* Product Brand Header / Tags */}
-        <div className="space-y-1 mb-3">
+        <div className="space-y-2 mb-4">
           <div className="flex justify-between items-center pr-8">
-            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
+            <span className="text-xs uppercase font-extrabold text-zinc-500 tracking-wider font-mono">
               {isSolar ? 'Solar Setup Portfolio' : (product as Product).cat}
             </span>
             {isStaffLoggedIn && (
@@ -141,7 +141,7 @@ export default function ProductDetailOverlay({
                 {onEdit && (
                   <button
                     onClick={() => onEdit(product)}
-                    className="text-[9px] font-sans font-extrabold uppercase bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 px-2 py-1 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
+                    className="text-[10px] font-sans font-extrabold uppercase bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 px-2.5 py-1.5 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
                   >
                     ✏️ Edit
                   </button>
@@ -153,7 +153,7 @@ export default function ProductDetailOverlay({
                         onDelete(product);
                       }
                     }}
-                    className="text-[9px] font-sans font-extrabold uppercase bg-red-955/10 text-red-400 hover:bg-red-500/25 px-1.5 py-1 rounded-md border border-red-500/30 flex items-center gap-1 transition-all"
+                    className="text-[10px] font-sans font-extrabold uppercase bg-red-955/10 text-red-400 hover:bg-red-500/25 px-2 py-1.5 rounded-md border border-red-500/30 flex items-center gap-1 transition-all"
                   >
                     <Trash2 className="w-3 h-3" />
                     <span>Delete</span>
@@ -162,9 +162,9 @@ export default function ProductDetailOverlay({
               </div>
             )}
           </div>
-          <h2 className="text-lg font-bold text-[#f5f5f5] leading-tight pr-8">{product.n}</h2>
+          <h2 className="text-xl md:text-2xl font-extrabold text-[#f5f5f5] tracking-tight leading-snug pr-8">{product.n}</h2>
           {(!isSolar && (product as Product).pn && (product as Product).pn !== '—') && (
-            <p className="text-[10px] text-zinc-400 font-mono">P/N: {(product as Product).pn}</p>
+            <p className="text-xs text-zinc-400 font-mono">P/N: {(product as Product).pn}</p>
           )}
         </div>
 
@@ -254,34 +254,34 @@ export default function ProductDetailOverlay({
         </div>
 
         {/* Specifications List */}
-        <div className="space-y-4">
+        <div className="space-y-5 md:space-y-6">
           <div>
-            <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Specifications</h4>
-            <p className="text-xs text-zinc-200 mt-1 font-mono leading-relaxed bg-[#0a0a0a] border border-[#262626] p-2.5 rounded-lg">
+            <h4 className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider font-sans">Specifications</h4>
+            <p className="text-sm text-zinc-100 mt-1.5 font-mono leading-relaxed bg-[#0a0a0a] border border-[#262626] p-3.5 rounded-xl">
               {product.sp}
             </p>
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">About Product</h4>
-            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            <h4 className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider font-sans">About Product</h4>
+            <p className="text-sm text-zinc-300 mt-1.5 leading-relaxed">
               {product.desc || "A top-tier commercial unit imported and certified by HiTech Distributors, providing incredible build lifespan metrics and high electrical insulation ratings."}
             </p>
           </div>
 
           {/* Pricing & Checkout Block */}
-          <div className="pt-3 border-t border-[#262626] flex items-center justify-between">
+          <div className="pt-4 border-t border-[#262626] flex items-center justify-between gap-4">
             <div>
-              <span className="text-[9px] uppercase font-bold text-zinc-500 block">Unit Price</span>
-              <span className="text-xl font-bold font-mono text-[#F5C518]">{displayPrice}</span>
+              <span className="text-xs uppercase font-extrabold text-zinc-500 block">Unit Price</span>
+              <span className="text-2xl md:text-3xl font-extrabold font-mono text-[#F5C518]">{displayPrice}</span>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2.5 shrink-0">
               <button
                 onClick={handleWhatsAppEnquiry}
-                className="p-2.5 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-600/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold uppercase"
+                className="px-5 py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-600/20 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-bold uppercase"
               >
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="w-5 h-5" />
                 WhatsApp
               </button>
 
@@ -295,9 +295,9 @@ export default function ProductDetailOverlay({
                     }
                     onClose();
                   }}
-                  className="px-4 py-2.5 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold uppercase shadow-lg"
+                  className="px-5 py-3 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-bold uppercase shadow-lg"
                 >
-                  <ShoppingCart className="w-4 h-4" />
+                  <ShoppingCart className="w-5 h-5" />
                   + Cart
                 </button>
               )}
