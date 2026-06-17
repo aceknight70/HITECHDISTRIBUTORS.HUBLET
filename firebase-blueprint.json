@@ -293,6 +293,42 @@
         }
       },
       "required": ["id", "cat", "n", "brand", "sp", "price"]
+    },
+    "EscalationTicket": {
+      "title": "Escalation Support Ticket",
+      "description": "Customer support escalation complaint ticket routed to advisor.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Ticket unique identifier (e.g., TKT-001)"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Customer full legal name."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Customer contact mobile."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Reference invoice or product code index."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detail description of complaint."
+        },
+        "status": {
+          "type": "string",
+          "description": "Received, Under Review, or Resolved state."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation localized ISO timestamp."
+        }
+      },
+      "required": ["id", "fullName", "phone", "ref", "description", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -331,6 +367,10 @@
     "solar_products/{solarProductId}": {
       "schema": { "$ref": "#/entities/SolarProduct" },
       "description": "Solar backup power equipment."
+    },
+    "escalations/{escalationId}": {
+      "schema": { "$ref": "#/entities/EscalationTicket" },
+      "description": "Help Desk support escalation complaint records."
     }
   }
 }

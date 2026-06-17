@@ -94,3 +94,14 @@ export interface AppState {
     accountName: string;
   };
 }
+
+export interface EscalationTicket {
+  id: string; // e.g. TKT-001
+  fullName: string;
+  phone: string;
+  ref: string; // Order or Product reference
+  description: string;
+  status: 'Received' | 'Under Review' | 'Resolved';
+  createdAt: string; // Timestamp
+}
+

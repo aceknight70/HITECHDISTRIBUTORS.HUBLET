@@ -9,10 +9,11 @@ import {
   Contact as ContactIcon, ShieldCheck, MapPin, Star, ShieldAlert, Cpu, Landmark,
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
-  Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink
+  Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink,
+  LifeBuoy, HelpCircle, Phone
 } from 'lucide-react';
 
-import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState } from './types';
+import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket } from './types';
 import { 
   CATS, PRODS, SOLAR, DEFAULT_DEALS, GALLERY_PHOTOS, WA_SALES, WA_INVENTORY, WA_GM, WA_GEN, DEF_PIN, MGR_KEY, STORE 
 } from './data';
@@ -343,8 +344,18 @@ export default function App() {
 
   const [repairsList, setRepairsList] = useState<RepairRecord[]>([]);
   const [gmqList, setGmqList] = useState<GMRequest[]>([]);
+  const [escalationsList, setEscalationsList] = useState<EscalationTicket[]>([]);
   const [reviewsList, setReviewsList] = useState<Review[]>([]);
   const [mgrStatus, setMgrStatus] = useState<'available' | 'busy'>('available');
+
+  // Escalation flow state controls
+  const [escalationName, setEscalationName] = useState('');
+  const [escalationPhone, setEscalationPhone] = useState('');
+  const [escalationRef, setEscalationRef] = useState('');
+  const [escalationDesc, setEscalationDesc] = useState('');
+  const [trackTicketNum, setTrackTicketNum] = useState('');
+  const [trackedTicket, setTrackedTicket] = useState<EscalationTicket | null>(null);
+  const [trackTicketError, setTrackTicketError] = useState('');
   
   const [bankAccount, setBankAccount] = useState({
     bank: 'Access Bank PLC',
@@ -713,6 +724,32 @@ export default function App() {
         console.warn("Repairs offline fallback notice: ", err);
       }
       handleFirestoreError(error, OperationType.LIST, 'repairs');
+    });
+    return () => unsub();
+  }, []);
+
+  // Synchronize Escalations Collection from Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'escalations'), (snapshot) => {
+      const items: EscalationTicket[] = [];
+      snapshot.forEach((doc) => {
+        items.push(doc.data() as EscalationTicket);
+      });
+      items.sort((a, b) => b.id.localeCompare(a.id));
+      setEscalationsList(items);
+      localStorage.setItem('ht_escalations', JSON.stringify(items));
+    }, (error) => {
+      try {
+        const persisted = localStorage.getItem('ht_escalations');
+        if (persisted) {
+          setEscalationsList(JSON.parse(persisted));
+        } else {
+          setEscalationsList([]);
+        }
+      } catch (err) {
+        console.warn("Escalations offline fallback notice: ", err);
+      }
+      handleFirestoreError(error, OperationType.LIST, 'escalations');
     });
     return () => unsub();
   }, []);
@@ -1416,7 +1453,18 @@ Message: ${quickMessageText}`;
     setRepBrand('');
     setRepDesc('');
     
-    alert(`Repair requested! Customer Name: ${repCustName}. Please backup your unit prior to dropoff at 6 Airport Road.`);
+    // Dispatch repair details automatically to Ruth's WhatsApp
+    const waText = `HiTech Distributors - New Repair Request Logged\n` +
+      `Owner Full Name: ${repCustName}\n` +
+      `Owner Contact Phone: ${repCustPhone}\n` +
+      `Device Category: ${repType}\n` +
+      `Device Brand/Model: ${repBrand}\n` +
+      `Isolatable Fault Description: ${repDesc || 'None Specified'}\n` +
+      `Diagnostic Triage Status: ${nRepair.aiTriage?.category || 'General Repair'}\n` +
+      `Email: hitechdistributors@gmail.com`;
+    openWhatsAppLink('+2348034832773', waText);
+
+    alert(`Your repair request has been received. Our Repairs & Tracking team will contact you shortly.`);
     setTriageLoading(false);
   };
 
@@ -1433,6 +1481,109 @@ Message: ${quickMessageText}`;
     } else {
       setTrackError('No registered ticket matches this reference block. (e.g. Try to register one in staff tab with a ref tag)');
     }
+  };
+
+  const [escalatedTicketFormSubmitted, setEscalatedTicketFormSubmitted] = useState('');
+
+  // Submit Support Escalation Ticket (Ese's routing)
+  const handleEscalationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!escalationName.trim() || !escalationPhone.trim() || !escalationDesc.trim()) {
+      alert("Name, contact phone, and issue description are required.");
+      return;
+    }
+
+    // Auto-generate ticket index format: TKT-001, TKT-002, etc.
+    const ticketIndex = escalationsList.length + 1;
+    const nextTicketNum = 'TKT-' + String(ticketIndex).padStart(3, '0');
+
+    const nTicket: EscalationTicket = {
+      id: nextTicketNum,
+      fullName: escalationName,
+      phone: escalationPhone,
+      ref: escalationRef,
+      description: escalationDesc,
+      status: 'Received',
+      createdAt: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
+    };
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'escalations', nTicket.id), nTicket);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'escalations/' + nTicket.id);
+    }
+
+    // Direct WhatsApp message to Ese (+234 703 272 4432)
+    const ticketMessage = `HiTech Distributors - NEW ESCALATION TICKET NOTIFICATION\n` +
+      `Ticket Number: ${nTicket.id}\n` +
+      `Customer Name: ${nTicket.fullName}\n` +
+      `Customer Contact: ${nTicket.phone}\n` +
+      `Order/Product Reference: ${nTicket.ref || 'None'}\n` +
+      `Complaint Description: ${nTicket.description}\n` +
+      `Date Submitted: ${nTicket.createdAt}\n` +
+      `Email: hitechdistributors@gmail.com`;
+    
+    openWhatsAppLink('+2347032724432', ticketMessage);
+
+    alert(`Your ticket #${nTicket.id} has been received. Our Service Advisor will contact you within 24 hours.`);
+
+    // Clear form
+    setEscalatedTicketFormSubmitted(nTicket.id);
+    setEscalationName('');
+    setEscalationPhone('');
+    setEscalationRef('');
+    setEscalationDesc('');
+  };
+
+  // Track Escalation Ticket Status
+  const handleTrackEscalationTicket = () => {
+    setTrackTicketError('');
+    setTrackedTicket(null);
+
+    const queryNum = trackTicketNum.trim().toUpperCase();
+    if (!queryNum) {
+      setTrackTicketError('Please provide a ticket ID to query.');
+      return;
+    }
+
+    const matched = escalationsList.find(t => t.id === queryNum);
+    if (matched) {
+      setTrackedTicket(matched);
+    } else {
+      setTrackTicketError(`Ticket number not found in our database. Please double check the format (e.g., TKT-001).`);
+    }
+  };
+
+  // Update Ticket Status (For authorized Service Advisor / Staff Portal)
+  const handleUpdateEscalationStatus = async (ticketId: string, nextStatus: 'Received' | 'Under Review' | 'Resolved') => {
+    const matched = escalationsList.find(t => t.id === ticketId);
+    if (!matched) return;
+
+    const updated: EscalationTicket = {
+      ...matched,
+      status: nextStatus
+    };
+
+    try {
+      await setDoc(doc(db, 'escalations', ticketId), updated);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'escalations/' + ticketId);
+    }
+  };
+
+  // Transfer resolved/severe complaint to General Manager (+234 803 217 5552)
+  const handleTransferToGM = (ticket: EscalationTicket) => {
+    const gmMessage = `HiTech Distributors General Manager Escalation\n` +
+      `Transferred by Service Advisor (Ese) \n\n` +
+      `Ticket Ref: ${ticket.id}\n` +
+      `Client: ${ticket.fullName} (${ticket.phone})\n` +
+      `Issue: ${ticket.description}\n` +
+      `Logged On: ${ticket.createdAt}\n` +
+      `Direct Action Requested by GM.`;
+    
+    openWhatsAppLink('+2348032175552', gmMessage);
+    alert(`Ticket #${ticket.id} has been transferred directly to General Manager (GM) for immediate review.`);
   };
 
   // Write new feedback review
@@ -1520,7 +1671,8 @@ Message: ${quickMessageText}`;
       }).catch(err => console.error("Sheets sales syncing error:", err));
     }
 
-    openWhatsAppLink(contacts.sales, text);
+    openWhatsAppLink('09166241953', text);
+    alert("Your invoice has been sent. Our Sales team will confirm your order shortly.");
   };
 
   return (
@@ -3816,6 +3968,373 @@ Message: ${quickMessageText}`;
               </div>
             )}
 
+            {/* ROOM 5B: SPECIALIZED SERVICE DESK */}
+            {currentRoom === 'servicedesk' && (
+              <div className="p-4 space-y-4 text-left">
+                <div className="text-center mb-1">
+                  <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Help & Communication Portal</h2>
+                  <p className="text-md font-serif font-bold text-zinc-300">Operational Service Desk</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase max-w-sm mx-auto">
+                    Choose a dedicated desk below to communicate directly with our representative roles. No personal names are shown in customer-facing interfaces for privacy and clarity.
+                  </p>
+                </div>
+
+                {/* THE 5 OPERATIONAL SERVICE DESK CARDS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans">
+                  {/* Card 1: Front Desk */}
+                  <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-lg">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 text-[#F5C518]" />
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Front Desk & General Support</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        For general enquiries, retail store hours, physical directions, and launching escalated complaint tickets. Receives ALL ticket escalations for review.
+                      </p>
+                      <div className="text-[10px] text-zinc-500 space-y-0.5">
+                        <p>WhatsApp: <span className="text-zinc-400 cursor-pointer hover:underline" onClick={() => openWhatsAppLink('+2347032724432', 'Hello Front Desk, I have a general enquiry...')}>+234 703 272 4432</span></p>
+                        <p>Email: <a href="mailto:hitechdistributors@gmail.com" className="text-zinc-400 hover:underline">hitechdistributors@gmail.com</a></p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1.5">
+                      <button 
+                        onClick={() => openWhatsAppLink('+2347032724432', 'Hello Front Desk Support, I have a general query regarding store items...')}
+                        className="flex-1 py-1.5 bg-[#0a0a0a] border border-[#262626] hover:bg-[#1f1f1f] text-[10px] text-zinc-300 rounded font-bold uppercase transition"
+                      >
+                        Contact Now
+                      </button>
+                      <a 
+                        href="#escalation-form"
+                        className="flex-1 py-1.5 bg-[#F5C518] hover:bg-[#d4a810] text-[#0a0a0a] text-center text-[10px] rounded font-bold uppercase transition"
+                      >
+                        Submit Ticket
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Sales & Orders */}
+                  <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-lg">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <ShoppingBag className="w-4 h-4 text-[#F5C518]" />
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Sales & Orders Department</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Handles wholesale/retail payment confirmations, order configuration, personalized wholesale pricing, custom bulk laptop packages, and invoice queries.
+                      </p>
+                      <div className="text-[10px] text-zinc-500 space-y-0.5">
+                        <p>WhatsApp: <span className="text-zinc-400 cursor-pointer hover:underline" onClick={() => openWhatsAppLink('+2349166241953', 'Hello Sales Department, I have a wholesale/order query...')}>+234 916 624 1953</span></p>
+                        <p>Email: <a href="mailto:hitechdistributors@gmail.com" className="text-zinc-400 hover:underline">hitechdistributors@gmail.com</a></p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => openWhatsAppLink('+2349166241953', 'Hello Sales & Orders Division, I am writing to query an invoice or verify a payment transaction...')}
+                      className="w-full py-1.5 bg-[#0a0a0a] border border-[#262626] hover:bg-[#1f1f1f] text-[10px] text-zinc-300 rounded font-bold uppercase transition pt-1.5"
+                    >
+                      Contact Now
+                    </button>
+                  </div>
+
+                  {/* Card 3: Pre-Sales & Live View */}
+                  <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-lg">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Video className="w-4 h-4 text-[#F5C518]" />
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Live Video Demonstration Desk</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Request a high-definition remote real-time video call (or scheduled walkaround visit) to physically view laptops, solar systems, or printers before purchase.
+                      </p>
+                      <div className="text-[10px] text-zinc-500 space-y-0.5">
+                        <p>WhatsApp: <span className="text-zinc-400 cursor-pointer hover:underline" onClick={() => openWhatsAppLink('+2348144824531', 'Hello Sales rep, I would like to request a live video demonstration of a product...')}>+234 814 482 4531</span></p>
+                        <p>Email: <a href="mailto:hitechdistributors@gmail.com" className="text-zinc-400 hover:underline">hitechdistributors@gmail.com</a></p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const namePrompt = prompt("Enter your Full Name for Live Viewing:");
+                        if (!namePrompt) return;
+                        const devicePrompt = prompt("Which Laptop model or Solar setup are you interested in viewing?");
+                        if (!devicePrompt) return;
+                        
+                        const text = `HiTech Distributors - New Live Video Demonstration Request\nCustomer Name: ${namePrompt}\nInterested Product: ${devicePrompt}\nEmail: hitechdistributors@gmail.com`;
+                        openWhatsAppLink('+2348144824531', text);
+                        alert("A Sales Representative will contact you to arrange a live viewing.");
+                      }}
+                      className="w-full py-1.5 bg-[#0a0a0a] border border-[#262626] hover:bg-[#1f1f1f] text-[10px] text-zinc-300 rounded font-bold uppercase transition"
+                    >
+                      Submit Request
+                    </button>
+                  </div>
+
+                  {/* Card 4: Repairs & Tracking */}
+                  <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-lg">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-[#F5C518]" />
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Repairs & Logistics Tracker</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Initiate technical hardware damage tickets, consult automated repair triage estimates, review device diagnostic status, and receive ready-for-pickup notifications.
+                      </p>
+                      <div className="text-[10px] text-zinc-500 space-y-0.5">
+                        <p>WhatsApp: <span className="text-zinc-400 cursor-pointer hover:underline" onClick={() => openWhatsAppLink('+2348034832773', 'Hello Repairs division, I want to inquire about a repair status...')}>+234 803 483 2773</span></p>
+                        <p>Email: <a href="mailto:hitechdistributors@gmail.com" className="text-zinc-400 hover:underline">hitechdistributors@gmail.com</a></p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentRoom('repair')}
+                      className="w-full py-1.5 bg-[#0a0a0a] border border-[#262626] hover:bg-[#1f1f1f] text-[10px] text-zinc-300 rounded font-bold uppercase transition"
+                    >
+                      Submit Request
+                    </button>
+                  </div>
+
+                  {/* Card 5: Pocket Store Advisor */}
+                  <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-lg md:col-span-2">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Bot className="w-4 h-4 text-[#F5C518]" />
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Pocket Store App Support</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Technical assistance relative to this digital application hublet, sync delays, bug submissions, or payment calculations support.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-zinc-500">
+                        <p>WhatsApp: <span className="text-zinc-400 cursor-pointer hover:underline" onClick={() => openWhatsAppLink('+2349052127886', 'Hello Tech Advisor, I need help with the hublet app...')}>+234 905 212 7886</span></p>
+                        <p>Email: <a href="mailto:hitechdistributors@gmail.com" className="text-zinc-400 hover:underline">hitechdistributors@gmail.com</a></p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const issue = prompt("Describe the layout, checkout, or database issue you are encountering with our Hublet Application:");
+                        if (!issue) return;
+                        
+                        const textMsg = `HiTech Distributors - Pocket Store App Technical Query\nIssue Details: ${issue}\nEmail: hitechdistributors@gmail.com`;
+                        openWhatsAppLink('+2349052127886', textMsg);
+                        alert("Our Service Advisor will assist you with any hublet-related issues.");
+                      }}
+                      className="w-full py-1.5 bg-[#0a0a0a] border border-[#262626] hover:bg-[#1f1f1f] text-[10px] text-zinc-300 rounded font-bold uppercase transition pt-1.5"
+                    >
+                      Submit Ticket
+                    </button>
+                  </div>
+                </div>
+
+                {/* ESCALATION TICKET SUBMISSION FORM */}
+                <div id="escalation-form" className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+                  <div className="border-b border-[#262626] pb-3 mb-1">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-500" />
+                      <span className="text-xs uppercase font-bold text-zinc-300 tracking-wider">Submit Escalation Ticket</span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1 uppercase leading-normal">
+                      If standard customer support was unable to solve your issue, launch a formal escalation. Your ticket will bypass standard waiting rooms and go directly to Ese's Desk.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleEscalationSubmit} className="space-y-3 font-sans text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Full Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="Your official name" 
+                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-zinc-500"
+                          value={escalationName}
+                          onChange={e => setEscalationName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Contact Phone Number</label>
+                        <input 
+                          type="text" 
+                          placeholder="+234..." 
+                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-zinc-500"
+                          value={escalationPhone}
+                          onChange={e => setEscalationPhone(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Order Code or Product Code Reference (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. INV-3841, Laptops, Inverter model" 
+                        className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-zinc-500"
+                        value={escalationRef}
+                        onChange={e => setEscalationRef(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Unresolved Trouble Description</label>
+                      <textarea 
+                        rows={3}
+                        placeholder="Detail what standard support has been unable to address..." 
+                        className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-zinc-500"
+                        value={escalationDesc}
+                        onChange={e => setEscalationDesc(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <button 
+                      type="submit"
+                      className="w-full py-2 bg-amber-600/10 hover:bg-amber-600/20 text-amber-500 rounded font-bold uppercase transition border border-amber-500/25 tracking-wide text-[10px]"
+                    >
+                      Submit Escalation Ticket
+                    </button>
+                  </form>
+                </div>
+
+                {/* TRACK TICKET SECTION */}
+                <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3 pb-5">
+                  <div className="border-b border-[#262626] pb-2">
+                    <span className="text-xs uppercase font-bold text-zinc-300 tracking-wider">Track My Ticket Status</span>
+                    <p className="text-[9px] text-zinc-500 uppercase mt-0.5">Enter your unique ticket ID (format: TKT-001) to verify official processing stage.</p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="e.g. TKT-001" 
+                      className="flex-1 bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-zinc-500 font-mono tracking-widest"
+                      value={trackTicketNum}
+                      onChange={e => setTrackTicketNum(e.target.value)}
+                    />
+                    <button 
+                      onClick={handleTrackEscalationTicket}
+                      className="px-4 py-1.5 bg-[#F5C518] hover:bg-[#d4a810] text-[#0a0a0a] text-xs font-bold uppercase rounded-lg transition"
+                    >
+                      Track
+                    </button>
+                  </div>
+
+                  {trackTicketError && (
+                    <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-500 text-[11px] rounded-lg font-sans">
+                      {trackTicketError}
+                    </div>
+                  )}
+
+                  {trackedTicket && (
+                    <div className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-4 space-y-4 text-zinc-300 font-sans">
+                      <div className="flex justify-between items-center border-b border-[#1f1f1f] pb-2 text-[11px]">
+                        <div>
+                          <span className="text-xs font-extrabold text-zinc-100 font-mono tracking-wider">{trackedTicket.id}</span>
+                          <span className="text-zinc-500 text-[10px] ml-2 block sm:inline">Logged: {trackedTicket.createdAt}</span>
+                        </div>
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${
+                          trackedTicket.status === 'Resolved' ? 'bg-emerald-500/15 text-emerald-400' :
+                          trackedTicket.status === 'Under Review' ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-800 text-zinc-400'
+                        }`}>
+                          {trackedTicket.status}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] space-y-1">
+                        <p><span className="text-zinc-500 uppercase font-bold tracking-wider">Client:</span> {trackedTicket.fullName}</p>
+                        {trackedTicket.ref && <p><span className="text-zinc-500 uppercase font-bold tracking-wider">Ref:</span> {trackedTicket.ref}</p>}
+                        <p className="bg-[#141414] p-2.5 rounded border border-[#1f1f1f] text-zinc-400 italic mt-2">
+                          "{trackedTicket.description}"
+                        </p>
+                      </div>
+
+                      {/* STAGES GRAPHIC STEP ENGINE */}
+                      <div className="border-t border-[#1f1f1f] pt-4 mt-2">
+                        <span className="text-[9px] font-bold uppercase text-zinc-500 tracking-wider block mb-3">Escalation Diagnostic Path</span>
+                        <div className="grid grid-cols-3 gap-1 relative font-mono text-[9px] font-bold text-center">
+                          {['Received', 'Under Review', 'Resolved'].map((stage, idx) => {
+                            const statuses = ['Received', 'Under Review', 'Resolved'];
+                            const currentIdx = statuses.indexOf(trackedTicket.status);
+                            const isActive = currentIdx >= idx;
+                            return (
+                              <div key={stage} className="flex flex-col items-center">
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center transition border ${
+                                  isActive ? 'bg-amber-500/10 border-amber-500 text-amber-500 shadow-[0_0_10px_rgba(245,197,24,0.1)]' : 'bg-zinc-900 border-zinc-800 text-zinc-600'
+                                }`}>
+                                  {isActive ? '✓' : idx + 1}
+                                </div>
+                                <span className={`mt-2 font-mono ${isActive ? 'text-zinc-200' : 'text-zinc-600'}`}>{stage}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 🔐 AUTHORIZED STAFF CONTROLS (Ese's Admin Desk) */}
+                {isStaffLoggedIn && (
+                  <div className="bg-zinc-950/40 border border-amber-500/10 p-4 rounded-xl space-y-4 pt-4 mt-2">
+                    <div className="border-b border-zinc-900 pb-2 flex justify-between items-center">
+                      <div>
+                        <span className="text-xs uppercase font-extrabold text-amber-500 tracking-widest font-mono">🔐 Service Desk Control Panel (Authorized Staff)</span>
+                        <p className="text-[9px] text-zinc-500 uppercase mt-0.5">Review, execute status updates, and optionally transfer severe complaints to the General Manager.</p>
+                      </div>
+                    </div>
+
+                    {escalationsList.length === 0 ? (
+                      <p className="text-center font-sans text-zinc-600 text-xs py-5 italic">No active customer escalation tickets listed.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {escalationsList.map(item => (
+                          <div key={item.id} className="bg-[#141414] border border-[#262626] rounded-lg p-3 space-y-2.5 font-sans relative">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-xs font-mono font-bold text-[#F5C518] block">{item.id}</span>
+                                <span className="text-[10px] text-zinc-400 font-bold">{item.fullName} ({item.phone})</span>
+                                {item.ref && <p className="text-[9px] text-zinc-500 font-bold uppercase mt-0.5">Ref Reference: {item.ref}</p>}
+                              </div>
+                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wide ${
+                                item.status === 'Resolved' ? 'bg-emerald-500/15 text-emerald-400' :
+                                item.status === 'Under Review' ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-800 text-zinc-400'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+
+                            <p className="text-[11px] text-zinc-400 bg-[#0a0a0a] px-2.5 py-2 rounded border border-[#1f1f1f]">
+                              "{item.description}"
+                            </p>
+
+                            <div className="flex flex-wrap gap-1.5 text-[9px] font-bold uppercase justify-end pt-1">
+                              {item.status !== 'Under Review' && item.status !== 'Resolved' && (
+                                <button 
+                                  onClick={() => handleUpdateEscalationStatus(item.id, 'Under Review')}
+                                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded transition"
+                                >
+                                  Review Ticket
+                                </button>
+                              )}
+                              {item.status !== 'Resolved' && (
+                                <button 
+                                  onClick={() => handleUpdateEscalationStatus(item.id, 'Resolved')}
+                                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded transition"
+                                >
+                                  Resolve Ticket
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handleTransferToGM(item)}
+                                className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded transition"
+                              >
+                                Escalate to GM
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ROOM 6: DEALS & PROMOTIONS */}
             {currentRoom === 'deals' && (
               <div className="p-4 space-y-4">
@@ -4388,12 +4907,13 @@ Message: ${quickMessageText}`;
           </div>
 
           {/* FIXED BOTTOM NAVIGATION BAR BAR */}
-          <nav id="nav" className="fixed bottom-0 left-0 bg-[#0a0a0a] border-t border-[#262626] w-full flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0">
+          <nav id="nav" className="fixed bottom-0 left-0 bg-[#0a0a0a] border-t border-[#262626] w-full flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0 font-sans">
             {[
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },
               { id: 'videogallery', label: 'Video Gallery', icon: <Video className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
-              { id: 'invoice', label: 'Invoice', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },
+              { id: 'invoice', label: 'Orders', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },
+              { id: 'servicedesk', label: 'Service Desk', icon: <LifeBuoy className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'solar', label: 'Solar', icon: <Sun className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'channels', label: 'Channels', icon: <Radio className="w-4 h-4" /> },
               { id: 'repair', label: 'Repair', icon: <Wrench className="w-4 h-4" /> },
