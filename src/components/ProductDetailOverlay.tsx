@@ -169,12 +169,12 @@ export default function ProductDetailOverlay({
         </div>
 
         {/* Product Image Section */}
-        <div className="relative aspect-video rounded-xl overflow-hidden bg-[#0a0a0a] border border-[#262626] flex items-center justify-center mb-4 text-xs text-zinc-500 group">
+        <div className="relative w-full h-[250px] rounded-xl bg-[#0a0a0a] border border-[#262626] flex items-center justify-center p-4 mb-4 text-xs text-zinc-500 group">
           {localImageUrl ? (
             <img 
               src={localImageUrl} 
               alt={product.n} 
-              className="w-full h-full object-cover"
+              className="max-w-full max-h-full object-contain rounded-lg select-none"
               onError={(e) => {
                 console.error(`🚨 [Image Load Failure] Product detail overlay image failed to load!`, {
                   url: localImageUrl,
