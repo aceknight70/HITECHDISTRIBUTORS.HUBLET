@@ -105,3 +105,20 @@ export interface EscalationTicket {
   createdAt: string; // Timestamp
 }
 
+export interface ManagerRequestTicket {
+  id: string; // format MGR-XXX
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  customerRef: string; // e.g., HT-XXXXX reference
+  category: 'Sales' | 'Repairs' | 'App Issue' | 'Payment' | 'Product Quality' | 'Other';
+  description: string;
+  previousAttempts: string;
+  saNotes: string;
+  urgency: 'Low' | 'Medium' | 'High' | 'Urgent';
+  preferredMeeting?: string;
+  status: 'Pending Review' | 'GM Assigned' | 'Meeting Scheduled' | 'Resolved' | 'Cancelled';
+  createdAt: string;
+  gmNotes?: string;
+}
+

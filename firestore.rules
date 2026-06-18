@@ -180,5 +180,19 @@ service cloud.firestore {
       allow create, update: if isValidId(escalationId);
       allow delete: if isSignedIn();
     }
+
+    // Rule match block: Invoices and Receipts
+    match /invoices/{invoiceId} {
+      allow read, write: if true;
+    }
+    match /receipts/{receiptId} {
+      allow read, write: if true;
+    }
+
+    // Rule match block: Manager Request Tickets (MGR-XXX)
+    match /manager_requests/{mgrId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

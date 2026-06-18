@@ -10,10 +10,10 @@ import {
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
   Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink,
-  LifeBuoy, HelpCircle, Phone, Clock, Calendar
+  LifeBuoy, HelpCircle, Phone, Clock, Calendar, Award
 } from 'lucide-react';
 
-import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket } from './types';
+import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket, ManagerRequestTicket } from './types';
 import { 
   CATS, PRODS, SOLAR, DEFAULT_DEALS, GALLERY_PHOTOS, WA_SALES, WA_INVENTORY, WA_GM, WA_GEN, DEF_PIN, MGR_KEY, STORE 
 } from './data';
@@ -22,9 +22,10 @@ import SolarSizingTool from './components/SolarSizingTool';
 import InfoBoothRoom from './components/InfoBoothRoom';
 import StaffRoom from './components/StaffRoom';
 import { HTVideoPlayer } from './components/HTVideoPlayer';
+import { DocumentViewer } from './components/DocumentViewer';
 import ProductDetailOverlay, { getDefaultProductImage } from './components/ProductDetailOverlay';
 import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsService';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
 import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
@@ -399,6 +400,86 @@ export default function App() {
     }
   };
 
+  // Parse URL query parameters to load doc views immediately (Clean shareable links)
+  useEffect(() => {
+    const checkParams = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const viewId = params.get('view');
+        if (!viewId) return;
+
+        console.log("Checking deep link parameter viewId:", viewId);
+
+        if (viewId.startsWith('INV-') || viewId.startsWith('RCP-')) {
+          const colName = viewId.startsWith('INV-') ? 'invoices' : 'receipts';
+          const docSnap = await getDoc(doc(db, colName, viewId));
+          if (docSnap.exists()) {
+            const docData = docSnap.data();
+            setActiveViewDocument({
+              type: viewId.startsWith('INV-') ? 'Invoice' : 'Receipt',
+              data: docData as any
+            });
+            setView('main-app');
+          } else {
+            console.warn(`No such transaction document ${viewId} found in Firestore.`);
+          }
+        } else if (viewId.startsWith('REP-') || viewId.startsWith('RPR-')) {
+          const docSnap = await getDoc(doc(db, 'repairs', viewId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setActiveViewDocument({
+              type: 'Repair Ticket',
+              data: {
+                id: data.ref || data.id || viewId,
+                date: data.submitted || data.entryDate || new Date().toLocaleDateString('en-GB'),
+                customerName: data.name || data.client || 'Valued Customer',
+                customerPhone: data.phone || '',
+                customerEmail: data.email || '',
+                refCode: data.ref || data.id,
+                deviceType: data.type || 'Device',
+                brand: data.brand || 'Generic',
+                problem: data.problem || 'Undergoing general diagnostics and checkup.',
+                stages: data.stages || ['Received'],
+                status: data.status || 'Received'
+              }
+            });
+            setView('main-app');
+          }
+        } else if (viewId.startsWith('MGR-')) {
+          const docSnap = await getDoc(doc(db, 'manager_requests', viewId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setActiveViewDocument({
+              type: 'Manager Request',
+              data: {
+                id: data.id,
+                date: data.createdAt,
+                customerName: data.customerName,
+                customerPhone: data.customerPhone,
+                customerEmail: data.customerEmail,
+                refCode: data.customerRef,
+                customerRef: data.customerRef,
+                category: data.category,
+                urgency: data.urgency,
+                description: data.description,
+                previousAttempts: data.previousAttempts,
+                saNotes: data.saNotes,
+                gmNotes: data.gmNotes,
+                preferredMeeting: data.preferredMeeting,
+                status: data.status
+              }
+            });
+            setView('main-app');
+          }
+        }
+      } catch (err) {
+        console.error("Deep link query checking error:", err);
+      }
+    };
+
+    checkParams();
+  }, [db]);
+
   useEffect(() => {
     const handleSync = () => {
       try {
@@ -481,6 +562,27 @@ export default function App() {
   const [trackTicketNum, setTrackTicketNum] = useState('');
   const [trackedTicket, setTrackedTicket] = useState<EscalationTicket | null>(null);
   const [trackTicketError, setTrackTicketError] = useState('');
+
+  // Manager Request state variables
+  const [managerRequestsList, setManagerRequestsList] = useState<ManagerRequestTicket[]>([]);
+  const [mgrCustName, setMgrCustName] = useState('');
+  const [mgrCustPhone, setMgrCustPhone] = useState('');
+  const [mgrCustEmail, setMgrCustEmail] = useState('');
+  const [mgrCustRef, setMgrCustRef] = useState('');
+  const [mgrCategory, setMgrCategory] = useState<'Sales' | 'Repairs' | 'App Issue' | 'Payment' | 'Product Quality' | 'Other'>('Sales');
+  const [mgrDescription, setMgrDescription] = useState('');
+  const [mgrPreviousAttempts, setMgrPreviousAttempts] = useState('');
+  const [mgrSaNotes, setMgrSaNotes] = useState('');
+  const [mgrUrgency, setMgrUrgency] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
+  const [mgrPreferredMeeting, setMgrPreferredMeeting] = useState('');
+  const [mgrTrackIdInput, setMgrTrackIdInput] = useState('');
+  const [mgrTrackedTicket, setMgrTrackedTicket] = useState<ManagerRequestTicket | null>(null);
+  const [mgrTrackError, setMgrTrackError] = useState('');
+
+  const [activeViewDocument, setActiveViewDocument] = useState<{
+    type: 'Invoice' | 'Receipt' | 'Repair Ticket' | 'Manager Request';
+    data: any;
+  } | null>(null);
   
   const [bankAccount, setBankAccount] = useState({
     bank: 'Access Bank PLC',
@@ -577,6 +679,41 @@ export default function App() {
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientAddress, setClientAddress] = useState('');
+
+  // Support custom manually written items right inside the public generator
+  const [customCartItems, setCustomCartItems] = useState<{ id: string; name: string; price: string; qty: number }[]>([]);
+  const [showDirectItemAdder, setShowDirectItemAdder] = useState(false);
+  const [directItemName, setDirectItemName] = useState('');
+  const [directItemPrice, setDirectItemPrice] = useState('');
+  const [directItemQty, setDirectItemQty] = useState(1);
+
+  const addCustomCartItem = (name: string, price: string, qty = 1) => {
+    let formattedPrice = price.trim();
+    if (!formattedPrice.startsWith('₦') && !formattedPrice.startsWith('₱') && !formattedPrice.startsWith('$')) {
+      formattedPrice = '₦' + formattedPrice;
+    }
+    const newItem = {
+      id: 'cust-' + Date.now() + Math.floor(Math.random() * 1000),
+      name: name.trim(),
+      price: formattedPrice,
+      qty: qty
+    };
+    setCustomCartItems(prev => [...prev, newItem]);
+  };
+
+  const removeCustomCartItem = (id: string) => {
+    setCustomCartItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const adjustCustomCartQty = (id: string, offset: number) => {
+    setCustomCartItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const nextQty = item.qty + offset;
+        return nextQty <= 0 ? null : { ...item, qty: nextQty };
+      }
+      return item;
+    }).filter(Boolean) as any);
+  };
 
   // Contact / Message input boxes
   const [quickMessageText, setQuickMessageText] = useState('');
@@ -875,6 +1012,32 @@ export default function App() {
         console.warn("Escalations offline fallback notice: ", err);
       }
       handleFirestoreError(error, OperationType.LIST, 'escalations');
+    });
+    return () => unsub();
+  }, []);
+
+  // Synchronize Manager Requests Collection from Firestore (MGR-XXX)
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'manager_requests'), (snapshot) => {
+      const items: ManagerRequestTicket[] = [];
+      snapshot.forEach((doc) => {
+        items.push(doc.data() as ManagerRequestTicket);
+      });
+      items.sort((a, b) => b.id.localeCompare(a.id));
+      setManagerRequestsList(items);
+      localStorage.setItem('ht_manager_requests', JSON.stringify(items));
+    }, (error) => {
+      try {
+        const persisted = localStorage.getItem('ht_manager_requests');
+        if (persisted) {
+          setManagerRequestsList(JSON.parse(persisted));
+        } else {
+          setManagerRequestsList([]);
+        }
+      } catch (err) {
+        console.warn("Manager requests offline fallback notice: ", err);
+      }
+      handleFirestoreError(error, OperationType.LIST, 'manager_requests');
     });
     return () => unsub();
   }, []);
@@ -1428,6 +1591,7 @@ export default function App() {
   const clearAllCarts = () => {
     saveCartToStorage({});
     saveSolarCartToStorage({});
+    setCustomCartItems([]);
   };
 
   // Compute standard totals
@@ -1442,7 +1606,8 @@ export default function App() {
   }).filter(item => item.product);
 
   const totalItemsCount = (standardCartItems.reduce((acc, cr) => acc + cr.qty, 0) as number) + 
-                          (solarCartItems.reduce((acc, cr) => acc + cr.qty, 0) as number);
+                          (solarCartItems.reduce((acc, cr) => acc + cr.qty, 0) as number) +
+                          (customCartItems.reduce((acc, cr) => acc + cr.qty, 0) as number);
 
   const calculateTotalPrice = () => {
     let total = 0;
@@ -1457,6 +1622,10 @@ export default function App() {
         const val = parseInt(item.product.price.replace(/[^\d]/g, '')) || 0;
         total += val * (item.qty as number);
       }
+    });
+    customCartItems.forEach(item => {
+      const val = parseInt(item.price.replace(/[^\d]/g, '')) || 0;
+      total += val * item.qty;
     });
     return total;
   };
@@ -1578,6 +1747,8 @@ Message: ${quickMessageText}`;
     setRepBrand('');
     setRepDesc('');
     
+    const cleanLink = `${window.location.origin}/?view=${nRepair.id}`;
+
     // Dispatch repair details automatically to Ruth's WhatsApp
     const waText = `HiTech Distributors - New Repair Request Logged\n` +
       `Owner Full Name: ${repCustName}\n` +
@@ -1585,7 +1756,10 @@ Message: ${quickMessageText}`;
       `Device Category: ${repType}\n` +
       `Device Brand/Model: ${repBrand}\n` +
       `Isolatable Fault Description: ${repDesc || 'None Specified'}\n` +
-      `Diagnostic Triage Status: ${nRepair.aiTriage?.category || 'General Repair'}\n` +
+      `Diagnostic Triage Status: ${nRepair.aiTriage?.category || 'General Repair'}\n\n` +
+      `📋 View Repair Record:\n` +
+      `👉 HiTech Repair #${nRepair.id}\n` +
+      `[TAP TO VIEW]: ${cleanLink}\n\n` +
       `Email: hitechdistributors@gmail.com`;
     openWhatsAppLink('+2348034832773', waText);
 
@@ -1603,8 +1777,240 @@ Message: ${quickMessageText}`;
     const matched = repairsList.find(r => r.ref.toLowerCase() === searchRef.trim().toLowerCase());
     if (matched) {
       setTrackedRepair(matched);
+      setActiveViewDocument({
+        type: 'Repair Ticket',
+        data: {
+          id: matched.ref,
+          date: matched.submitted || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+          customerName: matched.name,
+          customerPhone: matched.phone,
+          deviceType: matched.type,
+          brand: matched.brand,
+          problem: matched.problem,
+          status: matched.status,
+          stages: matched.stages || ['Received'],
+          refCode: matched.ref
+        }
+      });
     } else {
       setTrackError('No registered ticket matches this reference block. (e.g. Try to register one in staff tab with a ref tag)');
+    }
+  };
+
+  // Manager Request Ticket logic methods
+  const handleTrackManagerRequest = (overrideId?: string) => {
+    setMgrTrackError('');
+    setMgrTrackedTicket(null);
+
+    const queryId = overrideId || mgrTrackIdInput.trim().toUpperCase();
+    if (!queryId) {
+      setMgrTrackError('Please enter a valid ticket number (e.g. MGR-001)');
+      return;
+    }
+
+    const matched = managerRequestsList.find(r => r.id === queryId);
+    if (matched) {
+      setMgrTrackedTicket(matched);
+      setActiveViewDocument({
+        type: 'Manager Request',
+        data: {
+          id: matched.id,
+          date: matched.createdAt,
+          customerName: matched.customerName,
+          customerPhone: matched.customerPhone,
+          customerEmail: matched.customerEmail,
+          refCode: matched.customerRef,
+          customerRef: matched.customerRef,
+          category: matched.category,
+          urgency: matched.urgency,
+          description: matched.description,
+          previousAttempts: matched.previousAttempts,
+          saNotes: matched.saNotes,
+          gmNotes: matched.gmNotes,
+          preferredMeeting: matched.preferredMeeting,
+          status: matched.status
+        }
+      });
+    } else {
+      setMgrTrackError(`Manager Request Ticket ${queryId} was not found. Please verify the format or ask the Service Advisor (SA) if the ticket is registered.`);
+    }
+  };
+
+  const handleCreateManagerRequest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!mgrCustName.trim() || !mgrCustPhone.trim() || !mgrCustRef.trim() || !mgrDescription.trim() || !mgrPreviousAttempts.trim() || !mgrSaNotes.trim()) {
+      alert("Please fill all required fields marked with ✅!");
+      return;
+    }
+
+    let nextNum = managerRequestsList.length + 1;
+    let ticketId = 'MGR-' + String(nextNum).padStart(3, '0');
+    while (managerRequestsList.some(item => item.id === ticketId)) {
+      nextNum++;
+      ticketId = 'MGR-' + String(nextNum).padStart(3, '0');
+    }
+
+    const newTicket: ManagerRequestTicket = {
+      id: ticketId,
+      customerName: mgrCustName,
+      customerPhone: mgrCustPhone,
+      customerEmail: mgrCustEmail || undefined,
+      customerRef: mgrCustRef,
+      category: mgrCategory,
+      description: mgrDescription,
+      previousAttempts: mgrPreviousAttempts,
+      saNotes: mgrSaNotes,
+      urgency: mgrUrgency,
+      preferredMeeting: mgrPreferredMeeting || undefined,
+      status: 'Pending Review',
+      createdAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    };
+
+    try {
+      await setDoc(doc(db, 'manager_requests', ticketId), newTicket);
+
+      alert(`Success! Manager Request Ticket #${ticketId} has been generated and sent to the GM.`);
+
+      const cleanLink = `${window.location.origin}/?view=${ticketId}`;
+
+      // WhatsApp GM message (+234 803 217 5552)
+      const gmMessageStr = `HiTech Distributors - New Manager Request Logged\n` +
+        `Ticket ID: ${ticketId}\n` +
+        `Customer Name: ${mgrCustName}\n` +
+        `Category: ${mgrCategory}\n` +
+        `Urgency: ${mgrUrgency}\n\n` +
+        `📋 View Official Request:\n` +
+        `👉 HiTech Request #${ticketId}\n` +
+        `[TAP TO VIEW]: ${cleanLink}\n\n` +
+        `Please review and prepare for the meeting.`;
+      const gmCleanedPhone = '+2348032175552'.replace(/[^\d+]/g, '');
+      const whatsappGMUrl = `https://wa.me/${gmCleanedPhone}?text=${encodeURIComponent(gmMessageStr)}`;
+      
+      // WhatsApp Customer message
+      const custMessageStr = `Dear ${mgrCustName},\n\n` +
+        `Your request to speak with the General Manager was successfully received and logged.\n` +
+        `Your Manager Request Ticket #${ticketId} has been created.\n\n` +
+        `📋 View Official request info:\n` +
+        `👉 HiTech Request #${ticketId}\n` +
+        `[TAP TO VIEW]: ${cleanLink}\n\n` +
+        `The GM will review your case and contact you within 24 hours. Thank you for your patience!`;
+      
+      let destPhone = mgrCustPhone.replace(/[^\d+]/g, '');
+      if (destPhone.startsWith('0')) {
+        destPhone = '234' + destPhone.substring(1);
+      } else if (destPhone.startsWith('+')) {
+        destPhone = destPhone.substring(1);
+      } else if (!destPhone.startsWith('234') && destPhone.length === 10) {
+        destPhone = '234' + destPhone;
+      }
+      const whatsappCustUrl = `https://wa.me/${destPhone}?text=${encodeURIComponent(custMessageStr)}`;
+
+      // Reset fields
+      setMgrCustName('');
+      setMgrCustPhone('');
+      setMgrCustEmail('');
+      setMgrCustRef('');
+      setMgrCategory('Sales');
+      setMgrDescription('');
+      setMgrPreviousAttempts('');
+      setMgrSaNotes('');
+      setMgrUrgency('Medium');
+      setMgrPreferredMeeting('');
+
+      // Launch Document Viewer automatically
+      setActiveViewDocument({
+        type: 'Manager Request',
+        data: {
+          id: newTicket.id,
+          date: newTicket.createdAt,
+          customerName: newTicket.customerName,
+          customerPhone: newTicket.customerPhone,
+          customerEmail: newTicket.customerEmail,
+          refCode: newTicket.customerRef,
+          customerRef: newTicket.customerRef,
+          category: newTicket.category,
+          urgency: newTicket.urgency,
+          description: newTicket.description,
+          previousAttempts: newTicket.previousAttempts,
+          saNotes: newTicket.saNotes,
+          status: newTicket.status
+        }
+      });
+
+      // Try autospit to GM
+      window.open(whatsappGMUrl, '_blank');
+      
+      setTimeout(() => {
+        if (confirm(`Would you like to send meeting preparation brief to the customer (${newTicket.customerName}) on WhatsApp?`)) {
+          window.open(whatsappCustUrl, '_blank');
+        }
+      }, 800);
+
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'manager_requests/' + ticketId);
+    }
+  };
+
+  const handleUpdateManagerRequestStatus = async (
+    ticketId: string, 
+    nextStatus: 'Pending Review' | 'GM Assigned' | 'Meeting Scheduled' | 'Resolved' | 'Cancelled',
+    meetingTime?: string,
+    notes?: string
+  ) => {
+    const matched = managerRequestsList.find(r => r.id === ticketId);
+    if (!matched) return;
+
+    const updated: ManagerRequestTicket = {
+      ...matched,
+      status: nextStatus,
+      ...(meetingTime ? { preferredMeeting: meetingTime } : {}),
+      ...(notes ? { gmNotes: notes } : {})
+    };
+
+    try {
+      await setDoc(doc(db, 'manager_requests', ticketId), updated);
+      alert(`Ticket #${ticketId} status updated successfully to "${nextStatus}".`);
+
+      // If scheduled, trigger customer preparation brief WhatsApp
+      if (nextStatus === 'Meeting Scheduled' && meetingTime) {
+        const prepBrief = `Dear ${matched.customerName}, your Manager Request Ticket #${matched.id} has been reviewed. A meeting has been scheduled with the General Manager on ${meetingTime}. Please bring your invoice/receipt numbers and any relevant documents. The GM will be fully briefed on your case beforehand. If you need to reschedule, please contact the Service Advisor.`;
+        
+        let destPhone = matched.customerPhone.replace(/[^\d+]/g, '');
+        if (destPhone.startsWith('0')) {
+          destPhone = '234' + destPhone.substring(1);
+        } else if (destPhone.startsWith('+')) {
+          destPhone = destPhone.substring(1);
+        } else if (!destPhone.startsWith('234') && destPhone.length === 10) {
+          destPhone = '234' + destPhone;
+        }
+        const briefUrl = `https://wa.me/${destPhone}?text=${encodeURIComponent(prepBrief)}`;
+        window.open(briefUrl, '_blank');
+      }
+
+      // Refresh currently tracked/viewed document in preview
+      setActiveViewDocument({
+        type: 'Manager Request',
+        data: {
+          id: updated.id,
+          date: updated.createdAt,
+          customerName: updated.customerName,
+          customerPhone: updated.customerPhone,
+          customerEmail: updated.customerEmail,
+          refCode: updated.customerRef,
+          customerRef: updated.customerRef,
+          category: updated.category,
+          urgency: updated.urgency,
+          description: updated.description,
+          previousAttempts: updated.previousAttempts,
+          saNotes: updated.saNotes,
+          gmNotes: updated.gmNotes,
+          preferredMeeting: updated.preferredMeeting,
+          status: updated.status
+        }
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'manager_requests/' + ticketId);
     }
   };
 
@@ -1751,31 +2157,128 @@ Message: ${quickMessageText}`;
     }
   };
 
-  // Build Invoice WhatsApp details
-  const triggerInvoiceOrder = () => {
+  // Build Invoice / Receipt WhatsApp details & preview
+  const triggerInvoiceOrder = (docType: 'Invoice' | 'Receipt' = 'Invoice') => {
     if (!clientName || !clientPhone) {
-      alert("Recipient Name and Phone are absolute necessities for invoice generation!");
+      alert(`Recipient Name and Phone are absolute necessities for ${docType.toLowerCase()} generation!`);
       return;
     }
     const totalPrice = calculateTotalPrice();
-    const invCode = 'INV-' + Math.floor(1000 + Math.random() * 9000);
+    const prefix = docType === 'Invoice' ? 'INV-' : 'RCP-';
+    const invCode = prefix + Math.floor(1000 + Math.random() * 9000);
     
-    let text = `HiTech Distributors - Invoice Statement ${invCode}\n`;
-    text += `Client: ${clientName} (${clientPhone})\n`;
-    if (clientAddress) text += `Address: ${clientAddress}\n`;
-    text += `--------------------------------\n`;
+    const mappedItems: { name: string; qty: number; price: string }[] = [];
 
     standardCartItems.forEach(item => {
-      text += `· ${item.product?.n} x${item.qty} - ${item.product?.price}\n`;
+      if (item.product) {
+        mappedItems.push({ name: item.product.n, qty: item.qty, price: item.product.price });
+      }
     });
     solarCartItems.forEach(item => {
-      text += `· ${item.product?.n} x${item.qty} - ${item.product?.price}\n`;
+      if (item.product) {
+        mappedItems.push({ name: item.product.n, qty: item.qty, price: item.product.price });
+      }
+    });
+    customCartItems.forEach(item => {
+      mappedItems.push({ name: item.name, qty: item.qty, price: item.price });
     });
 
-    text += `--------------------------------\n`;
-    text += `Grand Total: ₦${totalPrice.toLocaleString()}\n`;
-    text += `Bank Account details:\nBank: ${bankAccount.bank}\nNo: ${bankAccount.accountNumber}\nName: ${bankAccount.accountName}\n`;
-    text += `Please send payment confirmation screenshot to retrieve items.`;
+    const docData = {
+      id: invCode,
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+      customerName: clientName,
+      customerPhone: clientPhone,
+      customerAddress: clientAddress || undefined,
+      items: mappedItems,
+      totalAmount: totalPrice,
+      bankDetails: bankAccount
+    };
+
+    // Save Doc to Firestore so it is retrievable via clean deep link
+    const targetCollection = docType === 'Invoice' ? 'invoices' : 'receipts';
+    setDoc(doc(db, targetCollection, invCode), docData)
+      .then(() => {
+        console.log(`${docType} stored successfully in Firestore block:`, invCode);
+      })
+      .catch(err => {
+        console.error("Firestore persistence warning:", err);
+      });
+
+    // Generate Clean shareable Link using location origin
+    const cleanLink = `${window.location.origin}/?view=${invCode}`;
+
+    // Format WhatsApp message text precisely as designed
+    let text = "";
+    if (docType === 'Invoice') {
+      text += `🔵 HITECH DISTRIBUTORS\n`;
+      text += `📋 ORDER REQUEST\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `Order #: ${invCode}\n`;
+      text += `Date: ${docData.date}\n`;
+      text += `Generated By: ${clientName}\n\n`;
+      text += `👤 CUSTOMER:\n`;
+      text += `Name: ${clientName}\n`;
+      text += `Phone: ${clientPhone}\n`;
+      if (clientAddress) text += `Address: ${clientAddress}\n`;
+      text += `Ref Code: HT-${invCode.substring(4)}\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `🛒 ITEMS:\n`;
+      mappedItems.forEach(item => {
+        text += `${item.name} (${item.qty}) - ${item.price}\n`;
+      });
+      text += `\n─────────────────────────────────\n\n`;
+      text += `💰 PAYMENT SUMMARY:\n`;
+      text += `Total Amount Due: ₦${totalPrice.toLocaleString()}\n`;
+      text += `Amount Paid:     ₦0\n`;
+      text += `⚠️ Balance:      ₦${totalPrice.toLocaleString()} (Due on Collection)\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `💳 Customer Bank Details:\n`;
+      text += `Bank: ${bankAccount.bank}\n`;
+      text += `Account Name: ${bankAccount.accountName}\n`;
+      text += `Account Number: ${bankAccount.accountNumber}\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `📋 View Full Order:\n`;
+      text += `👉 HiTech Order #${invCode}\n`;
+      text += `[TAP TO VIEW]: ${cleanLink}\n\n`;
+      text += `⚠️ Please process this order and confirm receipt.\n`;
+    } else {
+      text += `🟢 HITECH DISTRIBUTORS\n`;
+      text += `✅ PAYMENT CONFIRMATION\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `Dear ${clientName},\n\n`;
+      text += `Thank you for your payment!\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `Receipt #: ${invCode}\n`;
+      text += `Date: ${docData.date}\n`;
+      text += `Issued By: Lucy (Sales & Orders)\n\n`;
+      text += `👤 Customer:\n`;
+      text += `Name: ${clientName}\n`;
+      text += `Ref Code: HT-${invCode.substring(4)}\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `💰 PAYMENT DETAILS:\n`;
+      text += `Total Amount Due: ₦${totalPrice.toLocaleString()}\n`;
+      text += `Amount Paid:     ₦${totalPrice.toLocaleString()}\n`;
+      text += `Payment Method:  Bank Transfer\n`;
+      text += `Payment Status:  ✅ CONFIRMED\n`;
+      text += `Balance:         ₦0.00 (Fully Paid)\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `🛒 ITEMS:\n`;
+      mappedItems.forEach(item => {
+        text += `${item.name} (${item.qty}) - ${item.price}\n`;
+      });
+      text += `\n─────────────────────────────────\n\n`;
+      text += `💳 Bank Reconciliation:\n`;
+      text += `Bank: ${bankAccount.bank}\n`;
+      text += `Account Name: ${bankAccount.accountName}\n`;
+      text += `Last 4 Digits: ****${bankAccount.accountNumber.slice(-4)}\n`;
+      text += `Transaction Ref: ${invCode}-REC\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `📋 View Official Receipt:\n`;
+      text += `👉 HiTech Receipt #${invCode}\n`;
+      text += `[TAP TO VIEW]: ${cleanLink}\n\n`;
+      text += `─────────────────────────────────\n\n`;
+      text += `Thank you for choosing HiTech Distributors!\n`;
+    }
 
     // Automatically append sale log to linked Google Sheet (if authorized)
     const tsToken = getAccessToken();
@@ -1796,8 +2299,15 @@ Message: ${quickMessageText}`;
       }).catch(err => console.error("Sheets sales syncing error:", err));
     }
 
+    // Open local digital preview modal block
+    setActiveViewDocument({
+      type: docType,
+      data: docData
+    });
+
+    // Trigger WhatsApp link redirection to official business channel 
     openWhatsAppLink('09166241953', text);
-    alert("Your invoice has been sent. Our Sales team will confirm your order shortly.");
+    alert(`Your ${docType.toLowerCase()} #${invCode} has been generated and loaded. Standard broadcast has been pushed via WhatsApp.`);
   };
 
   return (
@@ -4735,112 +5245,221 @@ Message: ${quickMessageText}`;
                   <p className="text-md font-serif font-bold text-zinc-300">Standard Orders & Banking</p>
                 </div>
 
-                {standardCartItems.length === 0 && solarCartItems.length === 0 ? (
-                  <div className="bg-[#141414] border border-[#262626] p-6 text-center rounded-xl text-xs text-zinc-500">
-                    Your invoice checklist is empty. Visit Categories or Solar Hub to compile systems.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Item lines with quantity steppers */}
-                    <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Cart items checklist</span>
-                      
-                      <div className="divide-y divide-[#262626] space-y-2">
-                        {standardCartItems.map(item => (
-                          <div key={item.product?.id} className="pt-2 flex justify-between items-center text-xs gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-zinc-300 truncate">{item.product?.n}</p>
-                              <span className="font-mono text-[#F5C518] text-[10px]">{item.product?.price}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => adjustQty(item.product!.id, -1)} className="p-1 bg-[#0a0a0a] border border-zinc-800 text-zinc-400 hover:text-white rounded">-</button>
-                              <span className="font-mono w-4 text-center text-zinc-300">{item.qty}</span>
-                              <button onClick={() => adjustQty(item.product!.id, 1)} className="p-1 bg-[#0a0a0a] border border-zinc-800 text-zinc-400 hover:text-white rounded">+</button>
-                              <button onClick={() => removeFromCart(item.product!.id)} className="text-red-500 hover:text-red-400 text-[10px] ml-1 font-bold">×</button>
-                            </div>
-                          </div>
-                        ))}
-
-                        {solarCartItems.map(item => (
-                          <div key={item.product?.id} className="pt-2 flex justify-between items-center text-xs gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-zinc-300 truncate">{item.product?.n}</p>
-                              <span className="font-mono text-[#F5C518] text-[10px]">{item.product?.price}</span>
-                              <span className="text-[8px] bg-zinc-800 text-zinc-500 py-0.2 px-1 rounded ml-1 font-mono font-bold uppercase">Solar</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => adjustSolarQty(item.product!.id, -1)} className="p-1 bg-[#0a0a0a] border border-zinc-800 text-zinc-400 hover:text-white rounded">-</button>
-                              <span className="font-mono w-4 text-center text-zinc-300">{item.qty}</span>
-                              <button onClick={() => adjustSolarQty(item.product!.id, 1)} className="p-1 bg-[#0a0a0a] border border-zinc-800 text-zinc-400 hover:text-white rounded">+</button>
-                              <button onClick={() => removeSolarFromCart(item.product!.id)} className="text-red-500 hover:text-red-400 text-[10px] ml-1 font-bold">×</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="pt-3 border-t border-[#262626] flex justify-between items-center text-xs mt-3">
-                        <span className="text-zinc-500 font-bold uppercase tracking-wider">Estimated Total Cost</span>
-                        <span className="font-bold font-mono text-lg text-[#F5C518] pb-0.5">₦{calculateTotalPrice().toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    {/* Recipient info & Bank Account */}
-                    <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Bespoke voucher details</span>
-                      
+                {standardCartItems.length === 0 && solarCartItems.length === 0 && customCartItems.length === 0 ? (
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl text-center text-xs text-zinc-500 space-y-3">
+                    <p>Your invoice checklist is empty. Visit Categories or Solar Hub to compile systems.</p>
+                    <div className="border-t border-zinc-900/60 pt-3">
+                      <p className="text-[10px] text-zinc-400 font-bold uppercase mb-2">⚡ Or Add Quick Custom Item</p>
                       <div className="space-y-2">
                         <input 
                           type="text" 
-                          placeholder="Client Full Name Name" 
-                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
-                          value={clientName}
-                          onChange={e => setClientName(e.target.value)}
+                          placeholder="Item Description (e.g. HP ProBook 450 G9)" 
+                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
+                          value={directItemName}
+                          onChange={e => setDirectItemName(e.target.value)}
                         />
-                        <input 
-                          type="text" 
-                          placeholder="Client Active Phone No (WhatsApp)" 
-                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
-                          value={clientPhone}
-                          onChange={e => setClientPhone(e.target.value)}
-                        />
-                        <input 
-                          type="text" 
-                          placeholder="Client Delivery Address (Optional)" 
-                          className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
-                          value={clientAddress}
-                          onChange={e => setClientAddress(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Display bank details */}
-                      <div className="bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg space-y-1.5 text-xs">
-                        <div className="flex items-center gap-1 text-[#F5C518] font-bold">
-                          <Landmark className="w-3.5 h-3.5" />
-                          <span className="text-[9px] uppercase tracking-wider">Bank Transfer Deposit Voucher</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="Unit Price ₦ (e.g. 520,000)" 
+                            className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none"
+                            value={directItemPrice}
+                            onChange={e => setDirectItemPrice(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!directItemName.trim() || !directItemPrice.trim()) {
+                                alert("Please enter custom item name and unit price first!");
+                                return;
+                              }
+                              addCustomCartItem(directItemName, directItemPrice, 1);
+                              setDirectItemName('');
+                              setDirectItemPrice('');
+                            }}
+                            className="bg-[#F5C518] hover:bg-amber-400 font-bold text-black rounded text-[10px] uppercase tracking-wide cursor-pointer py-1.5"
+                          >
+                            + Add Line
+                          </button>
                         </div>
-                        <p className="text-[11px] text-zinc-400">Account Bank: <span className="text-zinc-200 font-bold font-mono">{bankAccount.bank}</span></p>
-                        <p className="text-[11px] text-zinc-400">Acc No: <span className="text-[#F5C518] font-bold font-mono select-all">{bankAccount.accountNumber}</span></p>
-                        <p className="text-[11px] text-zinc-400">Name: <span className="text-zinc-200">{bankAccount.accountName}</span></p>
-                        <span className="text-[8px] text-zinc-500 italic uppercase block pt-1 border-t border-zinc-900">Configurable dynamically by our authorized staff only.</span>
-                      </div>
-
-                      <div className="flex gap-2 text-xs font-bold pt-1 uppercase">
-                        <button 
-                          onClick={clearAllCarts}
-                          className="px-3 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg hover:text-white"
-                        >
-                          Clear
-                        </button>
-                        <button 
-                          onClick={triggerInvoiceOrder}
-                          className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-center transition"
-                        >
-                          Generate Invoice on WhatsApp →
-                        </button>
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Cart items checklist</span>
+                    
+                    <div className="divide-y divide-[#262626] space-y-2">
+                      {standardCartItems.map(item => (
+                        <div key={item.product?.id} className="pt-2 flex justify-between items-center text-xs gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-zinc-300 truncate">{item.product?.n}</p>
+                            <span className="font-mono text-[#F5C518] text-[10px]">{item.product?.price}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => adjustQty(item.product!.id, -1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">-</button>
+                            <span className="font-mono w-4 text-center text-zinc-300">{item.qty}</span>
+                            <button onClick={() => adjustQty(item.product!.id, 1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">+</button>
+                            <button onClick={() => removeFromCart(item.product!.id)} className="text-red-500 hover:text-red-400 text-[10px] ml-1 font-bold">×</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {solarCartItems.map(item => (
+                        <div key={item.product?.id} className="pt-2 flex justify-between items-center text-xs gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-zinc-300 truncate">{item.product?.n}</p>
+                            <span className="font-mono text-[#F5C518] text-[10px]">{item.product?.price}</span>
+                            <span className="text-[8px] bg-zinc-800 text-zinc-500 py-0.2 px-1 rounded ml-1 font-mono font-bold uppercase">Solar</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => adjustSolarQty(item.product!.id, -1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">-</button>
+                            <span className="font-mono w-4 text-center text-zinc-300">{item.qty}</span>
+                            <button onClick={() => adjustSolarQty(item.product!.id, 1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">+</button>
+                            <button onClick={() => removeSolarFromCart(item.product!.id)} className="text-red-500 hover:text-red-400 text-[10px] ml-1 font-bold">×</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {customCartItems.map(item => (
+                        <div key={item.id} className="pt-2 flex justify-between items-center text-xs gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-zinc-300 truncate">{item.name}</p>
+                            <span className="font-mono text-[#F5C518] text-[10px]">{item.price}</span>
+                            <span className="text-[8px] bg-[#F5C518]/15 text-[#F5C518] py-0.2 px-1 rounded ml-1 font-mono font-bold uppercase">Custom</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => adjustCustomCartQty(item.id, -1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">-</button>
+                            <span className="font-mono w-4 text-center text-zinc-300">{item.qty}</span>
+                            <button onClick={() => adjustCustomCartQty(item.id, 1)} className="p-1 bg-[#0a0a0a] border border-zinc-805 text-zinc-400 hover:text-white rounded w-6 text-center">+</button>
+                            <button onClick={() => removeCustomCartItem(item.id)} className="text-red-500 hover:text-red-400 text-[10px] ml-1 font-bold">×</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Quick Add Custom Item within active checklist */}
+                    <div className="pt-3 border-t border-zinc-900/60 mt-1">
+                      <button 
+                        type="button"
+                        onClick={() => setShowDirectItemAdder(!showDirectItemAdder)}
+                        className="text-[10px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                      >
+                        {showDirectItemAdder ? '▼ Close Quick Item Adder' : '▲ Add Custom Item to Checklist'}
+                      </button>
+                      
+                      {showDirectItemAdder && (
+                        <div className="bg-[#0a0a0a] p-3 border border-zinc-900 rounded-lg space-y-2 mt-2">
+                          <input 
+                            type="text" 
+                            placeholder="Item Title (e.g. Delivery fee)" 
+                            className="w-full bg-[#0d0d0d] border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-650 font-sans focus:outline-none"
+                            value={directItemName}
+                            onChange={e => setDirectItemName(e.target.value)}
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input 
+                              type="text" 
+                              placeholder="Unit Cost (e.g. 15,000)" 
+                              className="w-full bg-[#0d0d0d] border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none"
+                              value={directItemPrice}
+                              onChange={e => setDirectItemPrice(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!directItemName.trim() || !directItemPrice.trim()) {
+                                  alert("Provide custom item name and price.");
+                                  return;
+                                  }
+                                addCustomCartItem(directItemName, directItemPrice, 1);
+                                setDirectItemName('');
+                                setDirectItemPrice('');
+                              }}
+                              className="py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[9px] font-bold uppercase rounded cursor-pointer"
+                            >
+                              Add This Item
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-[#262626] flex justify-between items-center text-xs mt-3">
+                      <span className="text-zinc-500 font-bold uppercase tracking-wider">Estimated Total Cost</span>
+                      <span className="font-bold font-mono text-lg text-[#F5C518] pb-0.5">₦{calculateTotalPrice().toLocaleString()}</span>
+                    </div>
+                  </div>
                 )}
+
+                {/* Always Render Recipient info, Bank details, and Invoice / Receipt action buttons! */}
+                <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
+                  <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Bespoke voucher details</span>
+                  
+                  <div className="space-y-2">
+                    <input 
+                      type="text" 
+                      placeholder="Client Full Name" 
+                      className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+                      value={clientName}
+                      onChange={e => setClientName(e.target.value)}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Client Active Phone No (WhatsApp)" 
+                      className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none font-mono"
+                      value={clientPhone}
+                      onChange={e => setClientPhone(e.target.value)}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Client Delivery Address (Optional)" 
+                      className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+                      value={clientAddress}
+                      onChange={e => setClientAddress(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Display bank details */}
+                  <div className="bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg space-y-1.5 text-xs">
+                    <div className="flex items-center gap-1 text-[#F5C518] font-bold">
+                      <Landmark className="w-3.5 h-3.5" />
+                      <span className="text-[9px] uppercase tracking-wider">Bank Transfer Deposit Voucher</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">Account Bank: <span className="text-zinc-200 font-bold font-mono">{bankAccount.bank}</span></p>
+                    <p className="text-[11px] text-zinc-400">Acc No: <span className="text-[#F5C518] font-bold font-mono select-all">{bankAccount.accountNumber}</span></p>
+                    <p className="text-[11px] text-zinc-400">Name: <span className="text-zinc-200">{bankAccount.accountName}</span></p>
+                    <span className="text-[8px] text-zinc-500 italic uppercase block pt-1 border-t border-zinc-900">Configurable dynamically by our authorized staff only.</span>
+                  </div>
+
+                  <div className="flex flex-col gap-2 text-xs font-bold pt-1 uppercase">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => triggerInvoiceOrder('Invoice')}
+                        className="flex-1 py-12 px-4 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-center transition flex items-center justify-center gap-1.5 shadow-[0_0_8px_rgba(26,115,232,0.3)] cursor-pointer py-2 text-xs font-extrabold"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <span>Invoice 🔵</span>
+                      </button>
+                      <button 
+                        onClick={() => triggerInvoiceOrder('Receipt')}
+                        className="flex-1 py-12 px-4 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-center transition flex items-center justify-center gap-1.5 shadow-[0_0_8px_rgba(52,168,83,0.3)] cursor-pointer py-2 text-xs font-extrabold"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <span>Receipt 🟢</span>
+                      </button>
+                    </div>
+                    
+                    {(standardCartItems.length > 0 || solarCartItems.length > 0 || customCartItems.length > 0) && (
+                      <button 
+                        onClick={clearAllCarts}
+                        className="w-full py-1.5 bg-zinc-900 border border-zinc-805 text-zinc-500 rounded-lg hover:text-zinc-300 cursor-pointer text-[10px] tracking-wide"
+                      >
+                        Clear Checklist
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -4857,18 +5476,21 @@ Message: ${quickMessageText}`;
             {currentRoom === 'manager' && (
               <div className="p-4 space-y-4 text-left">
                 <div className="text-center mb-1">
-                  <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Lounge connection</h2>
+                  <h2 className="text-xs font-mono text-purple-500 uppercase tracking-widest">Executive Lounge</h2>
                   <p className="text-md font-serif font-bold text-zinc-300">General Manager Contact Desk</p>
                 </div>
 
-                {/* Info Card explaining the layout */}
-                <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-3">
-                  <div className="flex justify-between items-center border-b border-[#262626] pb-2">
-                    <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Select Director Desk</span>
+                {/* State Banner / GM Status */}
+                <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl space-y-4">
+                  <div className="flex justify-between items-center border-b border-[#262626]/60 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse" />
+                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Select Bureau Desk</span>
+                    </div>
                     <span className={`text-[9px] font-bold uppercase py-0.5 px-2 rounded ${
-                      mgrStatus === 'available' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                      mgrStatus === 'available' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/15 text-red-400 border border-red-500/20'
                     }`}>
-                      GM Status: {mgrStatus}
+                      GM Status: {mgrStatus.toUpperCase()}
                     </span>
                   </div>
 
@@ -4878,20 +5500,20 @@ Message: ${quickMessageText}`;
                       <button
                         key={tab}
                         onClick={() => setActiveManagerTab(tab)}
-                        className={`py-1.5 rounded transition ${
+                        className={`py-1.5 rounded-lg transition-all duration-200 ${
                           activeManagerTab === tab 
-                            ? 'bg-[#F5C518] text-[#0a0a0a]' 
-                            : 'bg-[#0a0a0a] border border-[#262626] text-zinc-400 hover:text-white'
+                            ? 'bg-purple-700 text-white shadow-[0_0_12px_rgba(156,39,176,0.3)]' 
+                            : 'bg-[#0a0a0a] border border-zinc-800 text-zinc-400 hover:text-white'
                         }`}
                       >
-                        {tab} Desk
+                        {tab === 'gm' ? '🟣 GM Request' : `${tab} Desk`}
                       </button>
                     ))}
                   </div>
 
                   {/* Sales & Inventory form flow */}
                   {(activeManagerTab === 'sales' || activeManagerTab === 'inventory') && (
-                    <div className="space-y-3 pt-2 font-sans">
+                    <div className="space-y-3 pt-2 font-sans animate-fade-in">
                       <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-bold">
                         {activeManagerTab === 'sales' 
                           ? 'Send inquiry to standard Sales Division regarding current desktop/laptop models.'
@@ -4924,91 +5546,439 @@ Message: ${quickMessageText}`;
 
                       <button
                         onClick={() => handleSendMessage(activeManagerTab)}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-lg transition"
+                        className="w-full py-2 bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-lg transition"
                       >
                         Submit Message via WhatsApp →
                       </button>
                     </div>
                   )}
 
-                  {/* GM Form Flow: Queued (Does NOT open WhatsApp immediately) */}
+                  {/* GM REQUEST TICKET SYSTEM */}
                   {activeManagerTab === 'gm' && (
-                    <div className="space-y-3 pt-2 border-t border-[#262626]/40 mt-1 font-sans">
-                      <div className="p-3 bg-[#e5e5e5] text-black border border-[# gb] rounded-lg text-xs leading-normal font-bold">
-                        ⚠️ General Manager Request Protocol:
-                        <p className="font-normal text-[11px] mt-1 text-zinc-800">
-                          Matters submitted here will NOT trigger standard immediate WhatsApp messages. Instead, they are queued directly for staff evaluation and coordinator follow-up.
-                        </p>
-                      </div>
-
-                      <div className="space-y-2.5">
-                        <div>
-                          <label className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Matter Category</label>
-                          <select
-                            className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white"
-                            value={gmRequestType}
-                            onChange={e => setGmRequestType(e.target.value as any)}
-                          >
-                            <option value="Business Partnership/Distributorship">Business Partnership / Distributorship</option>
-                            <option value="Large Corporate Order">Large Corporate Bulk Order</option>
-                            <option value="Escalated Complaint">Escalated Customer Complaint</option>
-                            <option value="VIP Customer Enquiry">VIP Customer Enquiry</option>
-                            <option value="Other Major Matter">Other Important Major Matter</option>
-                          </select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            placeholder="Your Name"
-                            className="bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-xs text-white focus:outline-none"
-                            value={quickName}
-                            onChange={e => setQuickName(e.target.value)}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Your WhatsApp Phone"
-                            className="bg-[#0a0a0a] border border-[#262626] rounded px-3 py-1.5 text-xs text-white focus:outline-none"
-                            value={quickPhone}
-                            onChange={e => setQuickPhone(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Preferred Coordinator Call Time</label>
-                          <select
-                            className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-1.5 text-xs text-white"
-                            value={gmContactTime}
-                            onChange={e => setGmContactTime(e.target.value)}
-                          >
-                            <option value="Morning (8am-12pm)">Morning (8:00 AM – 12:00 PM)</option>
-                            <option value="Afternoon (1pm-4pm)">Afternoon (1:00 PM – 4:00 PM)</option>
-                            <option value="Evening (5pm-7pm)">Evening (5:00 PM – 7:00 PM)</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Detailed Description of Request</label>
-                          <textarea
-                            placeholder="Detail your request..."
-                            className="w-full h-16 bg-[#0a0a0a] border border-[#262626] rounded p-3 text-xs text-white focus:outline-none"
-                            value={gmMessage}
-                            onChange={e => setGmMessage(e.target.value)}
-                          />
-                        </div>
-
-                        <button
-                          onClick={handleSubmitGMRequest}
-                          className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-[#F5C518] text-xs font-bold uppercase rounded-lg border border-zinc-700 transition"
+                    <div className="space-y-4 pt-1 animate-fade-in font-sans">
+                      {/* Sub-tab selection within GM systems */}
+                      <div className="flex border-b border-zinc-800 pb-1.5 gap-2 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                        <button 
+                          onClick={() => setMgrTrackIdInput('')} // trigger clean state
+                          className="px-2.5 py-1 rounded bg-[#0a0a0a] border border-zinc-800 hover:text-white"
                         >
-                          Queue GM Request →
+                          Customer Tracking
+                        </button>
+                        <button 
+                          onClick={() => {
+                            // Automatically preset role to Advisor for easy assessment
+                            if (!isStaffLoggedIn) {
+                              setIsStaffLoggedIn(true);
+                            }
+                            setStaffRole('Service Advisor Ese');
+                          }}
+                          className="px-2.5 py-1 rounded bg-purple-950/20 text-purple-300 border border-purple-800/30 hover:text-white"
+                        >
+                          SA Generator
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (!isStaffLoggedIn) {
+                              setIsStaffLoggedIn(true);
+                            }
+                            setStaffRole('General Manager');
+                          }}
+                          className="px-2.5 py-1 rounded bg-emerald-950/20 text-emerald-300 border border-emerald-800/30 hover:text-white"
+                        >
+                          GM Board Queue
                         </button>
                       </div>
+
+                      {/* SUB-SECTION 1: CUSTOMER VIEW & TRACKING */}
+                      <div className="bg-[#0c0c0c] border border-purple-900/20 p-3.5 rounded-xl space-y-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <ShieldAlert className="w-4 h-4 text-purple-500" />
+                          <span className="text-xs uppercase font-extrabold text-zinc-200 tracking-wider">
+                            Track Manager Request Ticket
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-normal uppercase">
+                          Enter your assigned Ticket sequence reference (e.g., MGR-001) to verify status updates and scheduled GM meeting briefs.
+                        </p>
+
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="MGR-XXX" 
+                            className="flex-1 bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-white uppercase focus:border-purple-800 focus:outline-none"
+                            value={mgrTrackIdInput}
+                            onChange={e => setMgrTrackIdInput(e.target.value)}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => handleTrackManagerRequest()}
+                            className="px-4 py-1.5 bg-purple-750 hover:bg-purple-800 text-white rounded text-xs font-mono font-bold transition-transform active:scale-95 cursor-pointer"
+                          >
+                            Track
+                          </button>
+                        </div>
+
+                        {mgrTrackError && <p className="text-[10px] text-red-500 font-mono italic">{mgrTrackError}</p>}
+
+                        {mgrTrackedTicket && (
+                          <div className="p-3 bg-[#111111] border border-purple-950 rounded-lg space-y-2.5 text-xs">
+                            <div className="flex justify-between items-center pb-2 border-b border-zinc-850">
+                              <span className="font-mono text-purple-400 font-bold uppercase text-[9px]">Ticket Ref: {mgrTrackedTicket.id}</span>
+                              <span className="text-purple-400 font-bold text-[9px] bg-purple-900/10 px-2 py-0.5 border border-purple-9c3f/20 rounded uppercase">
+                                {mgrTrackedTicket.status}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] space-y-1 text-zinc-300">
+                              <p>Customer Name: <span className="font-bold text-white">{mgrTrackedTicket.customerName}</span></p>
+                              <p>Issue Category: <span className="font-mono text-purple-400 font-bold">{mgrTrackedTicket.category}</span></p>
+                              <p>Urgency index: <span className="text-red-400 font-semibold">{mgrTrackedTicket.urgency}</span></p>
+                              <p className="text-zinc-400 line-clamp-2 italic">Problem: "{mgrTrackedTicket.description}"</p>
+                            </div>
+
+                            {/* PRE-MEETING PREPARATION ALERT CARD */}
+                            {mgrTrackedTicket.status === 'Meeting Scheduled' && (
+                              <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 space-y-1 text-[10px] rounded-lg mt-2 font-serif text-left leading-relaxed">
+                                <p className="font-sans font-bold text-[9px] uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Customer Pre-Meeting Preparation Protocol:</span>
+                                </p>
+                                <p className="font-sans font-bold bg-amber-500/20 p-1 text-center rounded text-sm text-yellow-300">
+                                  Meeting Time: {mgrTrackedTicket.preferredMeeting}
+                                </p>
+                                <p className="mt-1">
+                                  "Dear {mgrTrackedTicket.customerName}, your Ticket #{mgrTrackedTicket.id} is primed. A formal corporate meeting with the General Manager is Scheduled at {mgrTrackedTicket.preferredMeeting}. Please bring your reference numbers ({mgrTrackedTicket.customerRef}) and invoices. The GM has been fully briefed on your previous attempts history."
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Quick open PDF button */}
+                            <button 
+                              onClick={() => handleTrackManagerRequest(mgrTrackedTicket.id)}
+                              className="w-full py-1.5 bg-zinc-805 hover:bg-zinc-700 text-[#F5C518] rounded text-[10px] font-mono font-bold uppercase border border-zinc-700"
+                            >
+                              📄 Open Complete Digital PDF Sheet
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SUB-SECTION 2: SERVICE ADVISOR LEVEL GENERATOR */}
+                      {isStaffLoggedIn && (staffRole.toLowerCase().includes('advisor') || staffRole.toLowerCase().includes('ese') || staffRole.toLowerCase().includes('ade')) ? (
+                        <div className="bg-[#0b0c0f] border border-purple-900/30 p-4 rounded-xl space-y-3">
+                          <div className="flex justify-between items-center border-b border-zinc-850 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Award className="w-4 h-4 text-purple-400" />
+                              <span className="text-xs uppercase font-extrabold text-zinc-200 tracking-wider">
+                                Service Advisor Desk: Generate Ticket
+                              </span>
+                            </div>
+                            <span className="text-[8px] bg-purple-500/20 text-purple-400 font-bold px-2 rounded-lg py-0.5 select-none uppercase">
+                              Advisor logged
+                            </span>
+                          </div>
+
+                          <p className="text-[10px] text-zinc-500 leading-relaxed uppercase">
+                            Formal requested pre-escalation procedure. Fulfilling details allows automatic routing to the GM's database queue.
+                          </p>
+
+                          <form onSubmit={handleCreateManagerRequest} className="space-y-3 text-xs">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Name</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="Full Name" 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:border-purple-800"
+                                  value={mgrCustName}
+                                  onChange={e => setMgrCustName(e.target.value)}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Phone (WhatsApp)</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. 080XXXXXXXX" 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:border-purple-800"
+                                  value={mgrCustPhone}
+                                  onChange={e => setMgrCustPhone(e.target.value)}
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">Email Address</label>
+                                <input 
+                                  type="email" 
+                                  placeholder="client@mail.com" 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:border-purple-800"
+                                  value={mgrCustEmail}
+                                  onChange={e => setMgrCustEmail(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Invoice / Repair Ref</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. INV-3841, RPR-001" 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:border-purple-800"
+                                  value={mgrCustRef}
+                                  onChange={e => setMgrCustRef(e.target.value)}
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Issue Category</label>
+                                <select 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200"
+                                  value={mgrCategory}
+                                  onChange={e => setMgrCategory(e.target.value as any)}
+                                >
+                                  <option value="Sales">Sales Dispute / Bulk Logistics</option>
+                                  <option value="Repairs">Diagnostics Failure / Delay</option>
+                                  <option value="Payment">Payment Transfer Verification</option>
+                                  <option value="Product Quality">Hardware / Solar Quality Issue</option>
+                                  <option value="App Issue">Digital App System Bug</option>
+                                  <option value="Other">Other Executive Matter</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Urgency level</label>
+                                <select 
+                                  className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200"
+                                  value={mgrUrgency}
+                                  onChange={e => setMgrUrgency(e.target.value as any)}
+                                >
+                                  <option value="Low">Low (Administrative)</option>
+                                  <option value="Medium">Medium (Standard escalation)</option>
+                                  <option value="High">High (Urgent customer care)</option>
+                                  <option value="Urgent">Urgent (Immediate GM alert)</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Detailed Issue Description</label>
+                              <textarea 
+                                placeholder="Describe the core escalated complaint in detail..."
+                                className="w-full h-16 bg-[#050505] border border-zinc-850 rounded p-2.5 text-zinc-200 focus:outline-none"
+                                value={mgrDescription}
+                                onChange={e => setMgrDescription(e.target.value)}
+                                required
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">✅ Previous Attempts at Resolution</label>
+                              <textarea 
+                                placeholder="What measures were already tried (e.g., standard firmware patching, sales rep calling)?"
+                                className="w-full h-16 bg-[#050505] border border-zinc-850 rounded p-2.5 text-zinc-200 focus:outline-none"
+                                value={mgrPreviousAttempts}
+                                onChange={e => setMgrPreviousAttempts(e.target.value)}
+                                required
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] uppercase font-bold text-purple-300 block mb-1">✅ Service Advisor Notes & Recommendation</label>
+                              <textarea 
+                                placeholder="SA Evaluation: why is this worthy of meeting the General Manager directly?"
+                                className="w-full h-16 bg-[#050505] border border-purple-900/30 rounded p-2.5 text-zinc-200 focus:outline-none focus:border-purple-650"
+                                value={mgrSaNotes}
+                                onChange={e => setMgrSaNotes(e.target.value)}
+                                required
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] uppercase font-bold text-[#F5C518] block mb-1">Preferred Meeting Date/Time (Optional)</label>
+                              <input 
+                                type="text" 
+                                placeholder="e.g., Friday 24th Oct, 11:00 AM" 
+                                className="w-full bg-[#050505] border border-zinc-850 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none"
+                                value={mgrPreferredMeeting}
+                                onChange={e => setMgrPreferredMeeting(e.target.value)}
+                              />
+                            </div>
+
+                            <button 
+                              type="submit"
+                              className="w-full py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-mono uppercase font-bold rounded-lg transition shadow-md whitespace-nowrap"
+                            >
+                              🚀 Compile & Issue MGR Ticket to GM Board
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <div className="bg-[#141414] border border-[#262626] p-4 text-center rounded-xl text-xs text-zinc-500">
+                          🔒 Service Advisor ticket generator workspace is locked. Click the <strong className="text-purple-400">"SA Generator"</strong> helper option above to test drafting tickets.
+                        </div>
+                      )}
+
+                      {/* SUB-SECTION 3: GENERAL MANAGER BOARD QUEUE */}
+                      {isStaffLoggedIn && staffRole.toLowerCase().includes('manager') ? (
+                        <div className="bg-[#0b0c0f] border border-emerald-900/30 p-4 rounded-xl space-y-4">
+                          <div className="flex justify-between items-center border-b border-zinc-850 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Award className="w-4 h-4 text-emerald-400" />
+                              <span className="text-xs uppercase font-extrabold text-zinc-200 tracking-wider">
+                                General Manager Board: Official Reviews
+                              </span>
+                            </div>
+                            <span className="text-[8px] bg-emerald-500/20 text-emerald-400 font-bold px-2 rounded-lg py-0.5 select-none uppercase">
+                              Director Panel
+                            </span>
+                          </div>
+
+                          <p className="text-[10px] text-zinc-500 leading-relaxed uppercase">
+                            Direct executive database workspace. Review logged customer cases, reschedule meetings, input executive notes, and broadcast statuses.
+                          </p>
+
+                          {managerRequestsList.length === 0 ? (
+                            <div className="bg-[#0a0a0a] border border-zinc-900 p-6 text-center rounded text-xs text-zinc-500 italic">
+                              No tickets currently logged on the Manager board database.
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="border border-zinc-850 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+                                <table className="w-full text-left text-[11px] font-mono">
+                                  <thead className="bg-[#111] text-zinc-500 uppercase text-[9px] border-b border-zinc-850">
+                                    <tr>
+                                      <th className="p-2">Ticket</th>
+                                      <th className="p-2">Client name</th>
+                                      <th className="p-2">Category</th>
+                                      <th className="p-2 text-right">State</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-zinc-900 bg-[#070707] text-zinc-300">
+                                    {managerRequestsList.map(item => (
+                                      <tr 
+                                        key={item.id} 
+                                        className="hover:bg-zinc-900 cursor-pointer"
+                                        onClick={() => {
+                                          setMgrTrackedTicket(item);
+                                          // Directly open PDF preview as well
+                                          handleTrackManagerRequest(item.id);
+                                        }}
+                                      >
+                                        <td className="p-2 text-purple-400 font-bold">{item.id}</td>
+                                        <td className="p-2 truncate max-w-[80px]">{item.customerName}</td>
+                                        <td className="p-2 text-zinc-400">{item.category}</td>
+                                        <td className="p-2 text-right">
+                                          <span className="text-[8px] uppercase px-1 py-0.2 rounded font-sans font-bold bg-[#111] text-purple-300">
+                                            {item.status}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {mgrTrackedTicket && (
+                                <div className="p-4 bg-[#07080a] border border-zinc-850 rounded-xl space-y-4 text-xs font-sans">
+                                  <div className="pb-2 border-b border-zinc-850 flex justify-between items-center bg-[#111] p-2 rounded">
+                                    <span className="font-mono text-[10px] text-purple-400 font-bold">Review Ticket #{mgrTrackedTicket.id}</span>
+                                    <span className="text-[10px] uppercase font-bold text-zinc-400">Status: {mgrTrackedTicket.status}</span>
+                                  </div>
+
+                                  <div className="space-y-1.5 text-[11px] text-zinc-300">
+                                    <p>👤 <strong className="text-white">Customer:</strong> {mgrTrackedTicket.customerName} ({mgrTrackedTicket.customerPhone})</p>
+                                    <p>✉️ <strong>Email:</strong> {mgrTrackedTicket.customerEmail || 'Not declared'}</p>
+                                    <p>📝 <strong>Reference:</strong> {mgrTrackedTicket.customerRef}</p>
+                                    <p>📂 <strong>Issue:</strong> {mgrTrackedTicket.category} / Urgency: <span className="text-red-400 font-bold">{mgrTrackedTicket.urgency}</span></p>
+                                    <div className="bg-zinc-950 p-2.5 rounded border border-zinc-900 my-2 space-y-1">
+                                      <p className="text-zinc-500 font-mono text-[8px] uppercase">Problem Description:</p>
+                                      <p className="text-zinc-250 italic font-mono leading-relaxed font-normal">"{mgrTrackedTicket.description}"</p>
+                                      <p className="text-zinc-500 font-mono text-[8px] uppercase block mt-2">Previous Resolution Attempts:</p>
+                                      <p className="text-zinc-250 font-mono text-[10px] leading-relaxed">"{mgrTrackedTicket.previousAttempts}"</p>
+                                      <p className="text-zinc-500 font-mono text-[8px] uppercase block mt-2">Service Advisor Recommendation:</p>
+                                      <p className="text-purple-300 leading-relaxed font-bold font-mono">"{mgrTrackedTicket.saNotes}"</p>
+                                    </div>
+                                  </div>
+
+                                  {/* GM Response & Meeting controls */}
+                                  <div className="pt-3 border-t border-zinc-850 space-y-3 font-sans text-xs">
+                                    <div>
+                                      <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">👑 General Manager Notes / Response</label>
+                                      <textarea 
+                                        placeholder="Add GM assessment notes or custom boardroom response here..."
+                                        className="w-full h-20 bg-zinc-950 border border-zinc-900 rounded p-2.5 text-zinc-200 focus:outline-none"
+                                        id={`gm-notes-input-${mgrTrackedTicket.id}`}
+                                        defaultValue={mgrTrackedTicket.gmNotes || ''}
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">🗓️ Meeting Date & Time (If Scheduled)</label>
+                                      <input 
+                                        type="text" 
+                                        placeholder="e.g. Wednesday 22nd Aug, 2:00 PM" 
+                                        className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-200 focus:outline-none"
+                                        id={`gm-meeting-input-${mgrTrackedTicket.id}`}
+                                        defaultValue={mgrTrackedTicket.preferredMeeting || ''}
+                                      />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">Alter Status State</label>
+                                        <select 
+                                          className="w-full bg-zinc-950 border border-zinc-900 rounded px-2 py-1 text-zinc-200"
+                                          id={`gm-status-select-${mgrTrackedTicket.id}`}
+                                          defaultValue={mgrTrackedTicket.status}
+                                        >
+                                          <option value="Pending Review">Pending Review</option>
+                                          <option value="GM Assigned">GM Assigned</option>
+                                          <option value="Meeting Scheduled">Meeting Scheduled</option>
+                                          <option value="Resolved">Resolved</option>
+                                          <option value="Cancelled">Cancelled</option>
+                                        </select>
+                                      </div>
+                                      <div className="flex items-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const noteEl = document.getElementById(`gm-notes-input-${mgrTrackedTicket.id}`) as HTMLTextAreaElement;
+                                            const meetEl = document.getElementById(`gm-meeting-input-${mgrTrackedTicket.id}`) as HTMLInputElement;
+                                            const statEl = document.getElementById(`gm-status-select-${mgrTrackedTicket.id}`) as HTMLSelectElement;
+
+                                            handleUpdateManagerRequestStatus(
+                                              mgrTrackedTicket.id, 
+                                              statEl.value as any, 
+                                              meetEl.value, 
+                                              noteEl.value
+                                            );
+                                          }}
+                                          className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold uppercase transition"
+                                        >
+                                          💾 Save Board Changes
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-[#141414] border border-[#262626] p-4 text-center rounded-xl text-xs text-zinc-500">
+                          🔒 General Manager Board queue review is locked. Click the <strong className="text-emerald-400">"GM Board Queue"</strong> helper option above to simulate Director access levels.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
             )}
+
 
             {/* ROOM 11: SHADOW MANAGEMENT ACTIVITY LOG */}
             {currentRoom === 'shadow' && (
@@ -5276,6 +6246,20 @@ Message: ${quickMessageText}`;
         }}
         cloudinaryConfig={cloudinaryConfig}
       />
+
+      {/* DOCUMENT PREVIEW OVERLAY MODAL */}
+      {activeViewDocument && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-2xl relative my-8 animate-fade-in">
+            <DocumentViewer
+              type={activeViewDocument.type}
+              data={activeViewDocument.data}
+              onClose={() => setActiveViewDocument(null)}
+            />
+          </div>
+        </div>
+      )}
+
 
     </div>
   );
