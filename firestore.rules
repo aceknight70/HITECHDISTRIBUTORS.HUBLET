@@ -82,7 +82,7 @@ service cloud.firestore {
     // HELPER: Validate standard product
     function isValidProduct(data) {
       return data.keys.hasAll(['id', 'pn', 'cat', 'n', 'sp', 'price', 'desc'])
-        && (data.keys.size() >= 7 && data.keys.size() <= 10)
+        && (data.keys.size() >= 7 && data.keys.size() <= 11)
         && (data.id is int || data.id is float)
         && data.pn is string && data.pn.size() <= 128
         && data.cat is string && data.cat.size() <= 128
@@ -92,7 +92,8 @@ service cloud.firestore {
         && data.desc is string && data.desc.size() <= 5000
         && (!data.keys.hasAll(['promo']) || data.promo is bool)
         && (!data.keys.hasAll(['newp']) || data.newp is bool)
-        && (!data.keys.hasAll(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000000));
+        && (!data.keys.hasAll(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000000))
+        && (!data.keys.hasAll(['displayOrder']) || (data.displayOrder is string && data.displayOrder.size() <= 64));
     }
 
     // HELPER: Validate solar product

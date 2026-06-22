@@ -92,6 +92,7 @@ export default function ProductDetailOverlay({
 }: ProductDetailOverlayProps) {
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [activeView, setActiveView] = useState<'Front' | 'Side' | 'Back' | 'Top'>('Front');
 
   useEffect(() => {
     if (!product) {
@@ -118,193 +119,343 @@ export default function ProductDetailOverlay({
     onTriggerEnquiry(text);
   };
 
+  const brand = isSolar ? (product as SolarProduct).brand : (product.n.split(' ')[0] || 'HITECH');
+  const category = isSolar ? (product as SolarProduct).cat : (product as Product).cat;
+  const code = isSolar ? product.id : (product as Product).pn;
+  const shortDesc = product.desc || `Looking for an affordable & highly robust option certified by HiTech Distributors...`;
+
+  const specsList = product.sp
+    ? product.sp.split('\n').map(s => s.trim().replace(/^[•\-\*\s]+/, '')).filter(Boolean)
+    : ["No additional technical specifications provided."];
+
+  const getPromoLabel = () => {
+    const nameLower = product.n.toLowerCase();
+    if (!isSolar) {
+      const catLower = (product as Product).cat.toLowerCase();
+      if (catLower.includes('laptop') || nameLower.includes('laptop')) {
+        return '🔥 BUY 18 GET 2 FREE';
+      }
+      if (catLower.includes('printer') || nameLower.includes('printer')) {
+        return '🔥 GET COMPLIMENTARY TONER CART PACK';
+      }
+    } else {
+      const catVal = (product as SolarProduct).cat;
+      if (catVal === 'Lithium Batteries' || nameLower.includes('lithium')) {
+        return '🔥 SECURE 5-YEAR FULL DIRECT WARRANTY';
+      }
+      if (catVal === 'Solar Panels' || nameLower.includes('panel')) {
+        return '🔥 FREE STRUCTURAL MOUNT INSTALLATION';
+      }
+    }
+    return '🔥 BUY WHOLESALE VALUE PACK TO SAVE 10%';
+  };
+  const promoLabel = getPromoLabel();
+
+  // Dynamic 3D transform style based on perspective view
+  const getTransformStyle = (): React.CSSProperties => {
+    switch (activeView) {
+      case 'Side':
+        return { transform: 'perspective(600px) rotateY(38deg) skewY(-2deg) scale(0.95)' };
+      case 'Back':
+        return { transform: 'scaleX(-1) rotate(2deg)' };
+      case 'Top':
+        return { transform: 'perspective(600px) rotateX(42deg) rotateZ(8deg) scale(0.9)' };
+      case 'Front':
+      default:
+        return { transform: 'none' };
+    }
+  };
+
+  // Spacer component to separate rows
+  const PipelineSpacer = () => (
+    <div className="flex justify-center py-2 select-none no-print">
+      <span className="text-[#F5C518] text-[9px] font-mono tracking-widest animate-pulse">▼</span>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm flex justify-center items-center z-50 p-4 md:p-6">
-      {/* Expanded product detail card: fills 90% screen width, capped at 600px */}
-      <div className="bg-[#141414] border border-[#262626] rounded-2xl w-full max-w-[600px] overflow-y-auto max-h-[90vh] p-6 md:p-8 shadow-2xl relative scrollbar-none animate-slide-up">
+    <div className="fixed inset-0 bg-[#0a0a0a]/95 backdrop-blur-sm flex justify-center items-center z-50 p-4 md:p-6 overflow-y-auto">
+      {/* Target card container with beautiful high contrast border */}
+      <div className="bg-[#0c0c0c] border border-zinc-800 rounded-2xl w-full max-w-[460px] p-5 md:p-6 shadow-2xl relative scrollbar-none animate-slide-up flex flex-col my-auto border-double border-4">
+        
         {/* Close Button top-right */}
         <button 
           onClick={onClose}
-          className="absolute top-5 right-5 text-zinc-500 hover:text-zinc-200 p-1.5 bg-zinc-950 border border-[#262626] rounded-full transition-colors"
+          className="absolute -top-3.5 -right-3.5 text-zinc-400 hover:text-zinc-100 p-2 bg-[#121212] border border-zinc-800 rounded-full transition-all hover:scale-105 shadow-xl z-20 cursor-pointer"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        {/* Product Brand Header / Tags */}
-        <div className="space-y-2 mb-4">
-          <div className="flex justify-between items-center pr-8">
-            <span className="text-xs uppercase font-extrabold text-zinc-500 tracking-wider font-mono">
-              {isSolar ? 'Solar Setup Portfolio' : (product as Product).cat}
-            </span>
-            {isStaffLoggedIn && (
-              <div className="flex gap-1.5 shrink-0">
-                {onEdit && (
-                  <button
-                    onClick={() => onEdit(product)}
-                    className="text-[10px] font-sans font-extrabold uppercase bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 px-2.5 py-1.5 rounded-md border border-amber-500/30 flex items-center gap-1 transition-all"
-                  >
-                    ✏️ Edit
-                  </button>
-                )}
-                {onDelete && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Are you sure you want to delete "${product.n}" from database permanently?`)) {
-                        onDelete(product);
-                      }
-                    }}
-                    className="text-[10px] font-sans font-extrabold uppercase bg-red-955/10 text-red-400 hover:bg-red-500/25 px-2 py-1.5 rounded-md border border-red-500/30 flex items-center gap-1 transition-all"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Delete</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-          <h2 className="text-xl md:text-2xl font-extrabold text-[#f5f5f5] tracking-tight leading-snug pr-8">{product.n}</h2>
-          {(!isSolar && (product as Product).pn && (product as Product).pn !== '—') && (
-            <p className="text-xs text-zinc-400 font-mono">P/N: {(product as Product).pn}</p>
-          )}
-        </div>
-
-        {/* Product Image Section */}
-        <div className="relative w-full h-[250px] rounded-xl bg-[#0a0a0a] border border-[#262626] flex items-center justify-center p-4 mb-4 text-xs text-zinc-500 group">
-          {localImageUrl ? (
-            <img 
-              src={localImageUrl} 
-              alt={product.n} 
-              className="max-w-full max-h-full object-contain rounded-lg select-none"
-              onError={(e) => {
-                console.error(`🚨 [Image Load Failure] Product detail overlay image failed to load!`, {
-                  url: localImageUrl,
-                  id: product.id,
-                  name: product.n,
-                  host: window.location.host
-                });
-                if (localImageUrl.startsWith('/uploads/')) {
-                  console.warn(`💡 [Diagnostic Tip] Relative URL "/uploads/..." failed to load on Netlify. Dynamically uploaded photos are server-side and don't exist on Netlify (static deployment) without Option C (Cloudinary Auto-Hosting) configured.`);
-                }
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = getDefaultProductImage(product);
-              }}
-            />
-          ) : (
-            <div className="p-4 text-center space-y-2">
-              <Image className="w-8 h-8 text-zinc-600 mx-auto" />
-              <p className="text-zinc-500 text-[11px]">No product photo cached</p>
-            </div>
-          )}
-
-          {/* Upload spinner layer */}
-          {isUploading && (
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20">
-              <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-widest animate-pulse">Uploading...</span>
-            </div>
-          )}
-
-          {/* Direct photo upload trigger for logged-in staff */}
-          {isStaffLoggedIn && !isUploading && (
-            <label className="absolute bottom-2 right-2 bg-black/75 hover:bg-black text-[10px] text-amber-400 font-bold py-1.5 px-3 rounded-lg border border-zinc-800 cursor-pointer flex items-center gap-1.5 transition-all z-10 hover:border-amber-500/50 shadow-lg">
-              <Upload className="w-3.5 h-3.5" />
-              <span>Upload Photo</span>
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    setIsUploading(true);
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                      try {
-                        const dataUrl = reader.result as string;
-                        // Compress photo
-                        const compressed = await compressImage(dataUrl);
-                        // Save to server/CDN
-                        const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
-                        
-                        // Fire callback to save matching doc to Firestore/Local list
-                        if (onChangePhoto) {
-                          await onChangePhoto(product, finalUrl);
-                        }
-                        
-                        // Update cache in-applet
-                        onUpdateImageCache(product.id.toString(), finalUrl);
-                        setLocalImageUrl(finalUrl);
-                        alert("📷 Product showroom photo synced successfully!");
-                      } catch (innerErr: any) {
-                        alert("Upload failed: " + innerErr.message);
-                      } finally {
-                        setIsUploading(false);
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                  } catch (err: any) {
-                    alert("Failure initiating uploader: " + err.message);
-                    setIsUploading(false);
-                  }
-                }}
-              />
-            </label>
-          )}
-        </div>
-
-        {/* Specifications List */}
-        <div className="space-y-5 md:space-y-6">
-          <div>
-            <h4 className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider font-sans">Specifications</h4>
-            <p className="text-sm text-zinc-100 mt-1.5 font-mono leading-relaxed bg-[#0a0a0a] border border-[#262626] p-3.5 rounded-xl">
-              {product.sp}
-            </p>
-          </div>
-
-          <div>
-            <h4 className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider font-sans">About Product</h4>
-            <p className="text-sm text-zinc-300 mt-1.5 leading-relaxed">
-              {product.desc || "A top-tier commercial unit imported and certified by HiTech Distributors, providing incredible build lifespan metrics and high electrical insulation ratings."}
-            </p>
-          </div>
-
-          {/* Pricing & Checkout Block */}
-          <div className="pt-4 border-t border-[#262626] flex items-center justify-between gap-4">
-            <div>
-              <span className="text-xs uppercase font-extrabold text-zinc-500 block">Unit Price</span>
-              <span className="text-2xl md:text-3xl font-extrabold font-mono text-[#F5C518]">{displayPrice}</span>
-            </div>
-
-            <div className="flex gap-2.5 shrink-0">
-              <button
-                onClick={handleWhatsAppEnquiry}
-                className="px-5 py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-600/20 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-bold uppercase"
-              >
-                <MessageSquare className="w-5 h-5" />
-                WhatsApp
-              </button>
-
-              {displayPrice !== 'CALL' && (
+        {/* Staff Administration bar (only if staff is authenticated) */}
+        {isStaffLoggedIn && (
+          <div className="mb-4 p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg flex justify-between items-center no-print">
+            <span className="text-[9px] uppercase font-mono font-bold text-amber-500 tracking-wider">🔒 Staff Controls</span>
+            <div className="flex gap-1.5">
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(product)}
+                  className="text-[9px] font-mono font-bold uppercase bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 px-2 py-1 rounded border border-amber-500/20 transition-all cursor-pointer"
+                >
+                  ✏️ Edit
+                </button>
+              )}
+              {onDelete && (
                 <button
                   onClick={() => {
-                    if (isSolar) {
-                      onAddSolarToCart(product.id as string);
-                    } else {
-                      onAddToCart(product.id as number);
+                    if (window.confirm(`Are you sure you want to delete "${product.n}" permanently?`)) {
+                      onDelete(product);
                     }
-                    onClose();
                   }}
-                  className="px-5 py-3 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-bold uppercase shadow-lg"
+                  className="text-[9px] font-mono font-bold uppercase bg-red-950/20 text-red-400 hover:bg-red-500/20 px-2 py-1 rounded border border-red-500/25 transition-all cursor-pointer"
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  + Cart
+                  🗑️ Delete
                 </button>
               )}
             </div>
           </div>
+        )}
+
+        {/* Interactive Double-Bordered Image Box */}
+        <div className="border-4 border-double border-zinc-700 rounded-xl bg-black px-4 pt-4 pb-3.5 relative flex flex-col justify-between min-h-[240px] overflow-hidden select-none">
+          
+          {/* Top-Right Multi-View Selector labels & dots */}
+          <div className="absolute top-3.5 right-3.5 text-right z-10">
+            <div className="flex gap-2 justify-end font-mono text-[8px] font-extrabold uppercase tracking-widest text-zinc-500">
+              {(['Front', 'Side', 'Back', 'Top'] as const).map(view => (
+                <span 
+                  key={view} 
+                  onClick={() => setActiveView(view)}
+                  className={`cursor-pointer transition-colors ${activeView === view ? 'text-[#F5C518]' : 'hover:text-zinc-300'}`}
+                >
+                  {view}
+                </span>
+              ))}
+            </div>
+            
+            <div className="flex gap-2.5 justify-end font-mono text-[9px] items-center mt-1 pr-0.5 leading-none">
+              {(['Front', 'Side', 'Back', 'Top'] as const).map(view => (
+                <span 
+                  key={view}
+                  onClick={() => setActiveView(view)} 
+                  className={`cursor-pointer transition-colors leading-none ${activeView === view ? 'text-[#F5C518]' : 'text-zinc-700 hover:text-zinc-400'}`}
+                >
+                  {activeView === view ? '●' : '○'}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Central Image rendering with active View perspective */}
+          <div className="flex-1 flex items-center justify-center min-h-[140px] pt-4">
+            {localImageUrl ? (
+              <img 
+                src={localImageUrl} 
+                alt={product.n} 
+                style={getTransformStyle()}
+                className="max-w-full max-h-[140px] object-contain rounded-lg select-none transition-all duration-500 ease-in-out drop-shadow-2xl"
+                onError={(e) => {
+                  console.error(`🚨 Image Load Failure inside Card`, { url: localImageUrl });
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = getDefaultProductImage(product);
+                }}
+              />
+            ) : (
+              <div className="p-4 text-center space-y-1">
+                <Image className="w-7 h-7 text-zinc-700 mx-auto" />
+                <p className="text-zinc-600 text-[10px] uppercase font-mono">Photo not buffered</p>
+              </div>
+            )}
+
+            {/* Upload spinner layer */}
+            {isUploading && (
+              <div className="absolute inset-0 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20">
+                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-[9px] font-mono text-amber-400 font-extrabold uppercase tracking-widest animate-pulse">Synchronizing...</span>
+              </div>
+            )}
+
+            {/* Direct photo upload trigger for logged-in staff */}
+            {isStaffLoggedIn && !isUploading && (
+              <label className="absolute bottom-2 left-2 bg-black/80 hover:bg-black text-[9px] text-amber-400 font-mono font-bold py-1 px-2 rounded border border-zinc-800 cursor-pointer flex items-center gap-1 transition-all z-10 hover:border-amber-500/50 shadow-md">
+                <Upload className="w-3 h-3" />
+                <span>Upload</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setIsUploading(true);
+                      const reader = new FileReader();
+                      reader.onload = async () => {
+                        try {
+                          const dataUrl = reader.result as string;
+                          const compressed = await compressImage(dataUrl);
+                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                          if (onChangePhoto) {
+                            await onChangePhoto(product, finalUrl);
+                          }
+                          onUpdateImageCache(product.id.toString(), finalUrl);
+                          setLocalImageUrl(finalUrl);
+                          alert("📷 Product showroom photo synced successfully!");
+                        } catch (innerErr: any) {
+                          alert("Upload failed: " + innerErr.message);
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    } catch (err: any) {
+                      alert("Failure initiating uploader: " + err.message);
+                      setIsUploading(false);
+                    }
+                  }}
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Center aligned View name under picture */}
+          <div className="text-center mt-2">
+            <span className="text-[10px] text-zinc-500 font-mono tracking-widest uppercase">
+              ({activeView} View)
+            </span>
+          </div>
         </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* [BRAND BADGE] & [CATEGORY BADGE] */}
+        <div className="border border-[#262626] bg-[#070707] rounded-xl p-3 flex justify-center items-center gap-2">
+          <span className="bg-[#F5C518]/10 text-[#F5C518] border border-[#F5C518]/25 px-2.5 py-1 rounded text-[10px] uppercase font-mono font-extrabold tracking-wider">
+            {brand}
+          </span>
+          <span className="bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 px-2.5 py-1 rounded text-[10px] uppercase font-mono font-extrabold tracking-wider">
+            {category}
+          </span>
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Code representation Row */}
+        <div className="border border-[#262626] bg-[#070707] rounded-xl p-3 text-center">
+          <span className="text-zinc-650 font-mono text-[9px] uppercase font-bold tracking-wider mr-2">CODE:</span>
+          <span className="text-zinc-300 font-mono font-black text-[10px] tracking-widest uppercase select-all">
+            {code || 'HT-PROD'}
+          </span>
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Short description italic line */}
+        <div className="text-center text-[10.5px] italic text-zinc-400 font-serif leading-normal px-2">
+          ── {shortDesc} ──
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Specs bullet representation card */}
+        <div className="space-y-1 border border-zinc-900 bg-zinc-950 p-2.5 rounded-xl text-left select-text">
+          {specsList.map((spec, index) => (
+            <div key={index} className="flex items-start gap-1.5 text-[10.5px] text-zinc-350 font-mono leading-relaxed">
+              <span className="text-[#F5C518] shrink-0">•</span>
+              <span className="uppercase">{spec}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Name representation */}
+        <div className="border border-[#262626] bg-[#070707] rounded-xl p-3 text-center flex items-center justify-center gap-1.5">
+          <span className="text-[#F5C518] text-xs">⚙️</span>
+          <span className="text-[10px] font-black uppercase text-[#f3f3f3] tracking-widest font-sans leading-tight">
+            {product.n}
+          </span>
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Price & In stock representation */}
+        <div className="border border-[#262626] bg-[#070707] rounded-xl p-3 flex justify-between items-center text-[11px] font-mono font-extrabold tracking-wide uppercase select-text">
+          <span className="text-[#F5C518] text-xs font-black">{displayPrice}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse block"></span>
+            <span className="text-emerald-400 uppercase font-bold text-[9px] tracking-widest">● In Stock</span>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Promotion representation */}
+        <div className="border border-dashed border-amber-600/30 bg-amber-500/5 rounded-xl p-3 text-center">
+          <span className="text-amber-400 font-mono text-[9px] font-black uppercase tracking-widest block animate-pulse">
+            {promoLabel}
+          </span>
+        </div>
+
+        {/* Separator */}
+        <PipelineSpacer />
+
+        {/* Interactive customer reviews redirect */}
+        <button
+          type="button"
+          onClick={() => {
+            // Trigger custom event to setParent to feedback/review room
+            window.dispatchEvent(new CustomEvent('switch-room', { detail: 'feedback' }));
+            onClose();
+            // Scroll to testimonials layout
+            setTimeout(() => {
+              const el = document.getElementById('reviews-section') || document.getElementById('testimonials-section') || document.body;
+              el.scrollIntoView({ behavior: 'smooth' });
+            }, 180);
+          }}
+          className="w-full border border-dashed border-zinc-800 bg-[#0b0b0b] hover:bg-zinc-900 rounded-xl p-3 text-center text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:text-white hover:border-zinc-500 active:scale-98"
+        >
+          <span>👥 See what others think → Visit Website</span>
+        </button>
+
+        {/* Sleek checkout / action buttons outside the card structure */}
+        <div className="flex gap-2 mt-5 no-print border-t border-zinc-900 pt-4">
+          <button
+            type="button"
+            onClick={handleWhatsAppEnquiry}
+            className="flex-1 py-2.5 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded-xl transition-all flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Chat Spec</span>
+          </button>
+
+          {displayPrice !== 'CALL' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isSolar) {
+                  onAddSolarToCart(product.id as string);
+                } else {
+                  onAddToCart(product.id as number);
+                }
+                onClose();
+              }}
+              className="flex-1 py-2.5 px-3 bg-[#F5C518] hover:bg-amber-500 text-[#0a0a0a] rounded-xl transition-all flex items-center justify-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider cursor-pointer active:scale-95 shadow-md"
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>+ Cart List</span>
+            </button>
+          )}
+        </div>
+
       </div>
     </div>
   );
 }
+

@@ -55,8 +55,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error Details: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn('Firestore Error Details: ', JSON.stringify(errInfo));
+  // Not throwing error to prevent app crash when quota exceeded or permission denied
 }
 
 // Validate connection to Firestore on initialization

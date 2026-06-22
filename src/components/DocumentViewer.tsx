@@ -18,6 +18,10 @@ interface DocumentViewerProps {
     customerAddress?: string;
     refCode?: string; // For MGR or generic refs
     customerRef?: string;
+    transactionRef?: string;
+    purpose?: string;
+    paymentMethod?: string;
+    balanceRemaining?: number;
     
     // For Invoice / Receipt
     items?: DocumentLineItem[];
@@ -26,6 +30,7 @@ interface DocumentViewerProps {
       bank: string;
       accountNumber: string;
       accountName: string;
+      payingBank?: string;
     };
     
     // For Repair Ticket
@@ -49,6 +54,117 @@ interface DocumentViewerProps {
 
 export function DocumentViewer({ type, data, onClose }: DocumentViewerProps) {
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = React.useState<boolean>(false);
+
+  const ensureScriptsLoaded = async (): Promise<boolean> => {
+    const checkCanvas = () => typeof (window as any).html2canvas !== 'undefined';
+    const checkPdf = () => typeof (window as any).html2pdf !== 'undefined';
+    
+    if (checkCanvas() && checkPdf()) return true;
+
+    const loadScript = (src: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+      });
+    };
+
+    let canvasLoaded = checkCanvas();
+    if (!canvasLoaded) {
+      canvasLoaded = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    }
+
+    let pdfLoaded = checkPdf();
+    if (!pdfLoaded) {
+      pdfLoaded = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js');
+    }
+
+    return checkCanvas() && checkPdf();
+  };
+
+  const getDownloadFilename = () => {
+    let prefix = 'HiTech_Document';
+    if (type === 'Invoice') prefix = 'HiTech_Invoice';
+    else if (type === 'Receipt') prefix = 'HiTech_Receipt';
+    else if (type === 'Repair Ticket') prefix = 'HiTech_Repair';
+    else if (type === 'Manager Request') prefix = 'HiTech_Request';
+    return `${prefix}_${data.id}`;
+  };
+
+  const downloadPNG = async () => {
+    setDownloading(true);
+    const scriptsOK = await ensureScriptsLoaded();
+    if (!scriptsOK) {
+      alert("Unable to download. Please try again or contact support.");
+      setDownloading(false);
+      return;
+    }
+
+    const elementId = `doc-content-${data.id}`;
+    const element = document.getElementById(elementId);
+    if (!element) {
+      alert("Unable to locate element to download.");
+      setDownloading(false);
+      return;
+    }
+
+    const canvasLib = (window as any).html2canvas;
+    canvasLib(element, {
+      scale: 2, // High quality
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false
+    }).then((canvas: any) => {
+      const link = document.createElement('a');
+      link.download = getDownloadFilename() + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      setDownloading(false);
+    }).catch((error: any) => {
+      console.error('PNG download failed:', error);
+      alert('Unable to download. Please try again or contact support.');
+      setDownloading(false);
+    });
+  };
+
+  const downloadPDF = async () => {
+    setDownloading(true);
+    const scriptsOK = await ensureScriptsLoaded();
+    if (!scriptsOK) {
+      alert("Unable to download. Please try again or contact support.");
+      setDownloading(false);
+      return;
+    }
+
+    const elementId = `doc-content-${data.id}`;
+    const element = document.getElementById(elementId);
+    if (!element) {
+      alert("Unable to locate element to download.");
+      setDownloading(false);
+      return;
+    }
+
+    const pdfLib = (window as any).html2pdf;
+    const opt = {
+      margin: 0.5,
+      filename: getDownloadFilename() + '.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+
+    pdfLib().set(opt).from(element).save().then(() => {
+      setDownloading(false);
+    }).catch((error: any) => {
+      console.error('PDF download failed:', error);
+      alert('Unable to download. Please try again or contact support.');
+      setDownloading(false);
+    });
+  };
 
   // Styling maps
   const colorSchemes = {
@@ -132,21 +248,24 @@ export function DocumentViewer({ type, data, onClose }: DocumentViewerProps) {
     const textDetails = `
 === HITECH DISTRIBUTORS - ${type.toUpperCase()} ===
 Document ID: ${data.id}
+Document Link: ${window.location.origin}/?view=${data.id}
+Note: Tap to view and download your invoice/receipt as PNG or PDF.
+
 Date: ${data.date}
 Customer: ${data.customerName}
 Phone: ${data.customerPhone}
-${data.customerEmail ? `Email: ${data.customerEmail}\n` : ''}
-${data.customerAddress ? `Address: ${data.customerAddress}\n` : ''}
-${data.refCode ? `Reference Code: ${data.refCode}\n` : ''}
+${data.customerEmail ? `Email: ${data.customerEmail}\n` : ''}${data.customerAddress ? `Address: ${data.customerAddress}\n` : ''}${data.refCode ? `Reference Code: ${data.refCode}\n` : ''}
 
 ${type === 'Invoice' || type === 'Receipt' ? `
 Items:
 ${data.items?.map(it => `- ${it.name} x${it.qty} (${it.price})`).join('\n')}
 Total Amount: ₦${data.totalAmount?.toLocaleString()}
 Bank Details:
-Bank: ${data.bankDetails?.bank}
-Acct No: ${data.bankDetails?.accountNumber}
-Acct Name: ${data.bankDetails?.accountName}
+Bank: ${data.bankDetails?.bank || 'GTBank'}
+Acct No: ${data.bankDetails?.accountNumber || '9006163631'}
+Acct Name: ${data.bankDetails?.accountName || 'HiTech Distributors'}
+Paying Bank: ${data.bankDetails?.payingBank || 'UBA'}
+Transaction Ref: ${data.transactionRef || 'ABR_123456_7890'}
 ` : ''}
 
 ${type === 'Repair Ticket' ? `
@@ -161,16 +280,29 @@ Urgency Level: ${data.urgency}
 Issue Description: ${data.description}
 Previous Try/Attempts: ${data.previousAttempts}
 Service Advisor (SA) Notes: ${data.saNotes}
-${data.gmNotes ? `General Manager (GM) Notes: ${data.gmNotes}\n` : ''}
-${data.preferredMeeting ? `Scheduled Meeting: ${data.preferredMeeting}\n` : ''}
+${data.gmNotes ? `General Manager (GM) Notes: ${data.gmNotes}\n` : ''}${data.preferredMeeting ? `Scheduled Meeting: ${data.preferredMeeting}\n` : ''}
 ` : ''}
 
 ==================================
-Contact: hitechdistributors@gmail.com
+📞 CONTACT US:
+🏢 Front Desk: +234 703 272 4432
+💰 Sales & Orders: 09166241953
+🛒 Sales Rep: +234 814 482 4531
+🔧 Repairs & Tracking: +234 803 483 2773
+⭐ General Manager: +234 803 217 5552
+✉️ Email 1: hitechdistributors@gmail.com
+✉️ Email 2: hitechd@hitechd.com
     `;
     navigator.clipboard.writeText(textDetails.trim());
     alert("Copied document details to clipboard!");
-  };
+  };  const isReceipt = type === 'Receipt' || type === 'Invoice';
+  const paperBg = isReceipt ? 'bg-[#0a0e1a]' : 'bg-white';
+  const paperText = isReceipt ? 'text-white' : 'text-zinc-900';
+  const paperTextSec = isReceipt ? 'text-zinc-300' : 'text-zinc-500';
+  const paperBorder = isReceipt ? 'border-zinc-800' : 'border-zinc-200';
+  const paperDivider = isReceipt ? 'border-zinc-800' : 'border-zinc-300';
+  const paperCardBg = isReceipt ? 'bg-white/5' : 'bg-zinc-50/50';
+  const paperLabelColor = isReceipt ? 'text-[#34a853]' : 'text-zinc-400';
 
   return (
     <div className={`p-4 bg-[#0a0a0a] border ${scheme.borderClass} rounded-xl overflow-hidden shadow-2xl relative space-y-4`} id={`doc-${data.id}`}>
@@ -214,23 +346,32 @@ Contact: hitechdistributors@gmail.com
       </div>
 
       {/* Main Printable Area Wrapper */}
-      <div ref={printAreaRef} className="bg-white text-zinc-900 p-6 rounded-lg text-left shadow-lg font-sans border border-zinc-200">
+      <div ref={printAreaRef} id={`doc-content-${data.id}`} className={`${paperBg} ${paperText} p-6 rounded-lg text-left shadow-lg font-sans border ${paperBorder}`}>
         
         {/* Document Header */}
-        <div className="flex justify-between items-start border-b border-zinc-300 pb-4">
+        <div className={`flex justify-between items-start border-b pb-4 ${paperDivider}`}>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               {/* Colored Indicator */}
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: scheme.primary }} />
-              <h2 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-mono">
-                HITECH DISTRIBUTORS
+              <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: scheme.primary }} />
+              <h2 className={`text-sm font-extrabold tracking-tight uppercase font-mono ${paperText}`}>
+                {type === 'Receipt' ? '🟢 HITECH DISTRIBUTORS' : 'HITECH DISTRIBUTORS'}
               </h2>
             </div>
-            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">
-              Warri Delta State Showroom Hub
+            <p className={`text-[10px] font-bold ${isReceipt ? 'text-[#34a853]' : 'text-zinc-500'} tracking-wider`}>
+              Computers · Office Equipment · Solar Sizing Hub
             </p>
-            <p className="text-[9px] text-zinc-400">
-              Email: hitechdistributors@gmail.com | Phone: +234 814 482 4531
+            <p className={`text-[9px] ${paperTextSec}`}>
+              6 Airport Road, Warri · Delta State, Nigeria
+            </p>
+            <p className={`text-[9px] font-mono flex flex-wrap gap-x-3 gap-y-0.5 ${paperTextSec}`}>
+              <span>📞 +234 803 217 5552</span>
+              <span>📞 09166241953</span>
+            </p>
+            <p className={`text-[9px] font-mono flex flex-wrap gap-x-2 gap-y-1 ${paperTextSec}`}>
+              <span>✉️ hitechdistributors@gmail.com</span>
+              <span className={isReceipt ? 'text-zinc-700' : 'text-zinc-300'}>│</span>
+              <span>hitechd@hitechd.com</span>
             </p>
           </div>
           <div className="text-right space-y-1">
@@ -240,39 +381,39 @@ Contact: hitechdistributors@gmail.com
             >
               {type.toUpperCase()}
             </span>
-            <p className="text-[11px] font-mono text-zinc-800 font-bold block mt-1">
+            <p className={`text-[11px] font-mono font-bold block mt-1 ${paperText}`}>
               Ref #: {data.id}
             </p>
-            <p className="text-[9px] text-zinc-500 font-mono">
+            <p className={`text-[9px] font-mono ${paperTextSec}`}>
               Date: {data.date}
             </p>
           </div>
         </div>
 
         {/* Customer Information Block */}
-        <div className="my-4 bg-zinc-50 border border-zinc-200 p-3 rounded-lg grid grid-cols-2 gap-4">
+        <div className={`my-4 p-3 rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-4 border ${paperCardBg} ${paperBorder}`}>
           <div>
-            <h4 className="text-[9px] uppercase font-extrabold tracking-wider text-zinc-400 block mb-1">
-              Customer Details
+            <h4 className={`text-[9px] uppercase font-extrabold tracking-wider ${paperLabelColor} block mb-1`}>
+              👤 Customer Information
             </h4>
-            <p className="text-xs font-bold text-zinc-800">{data.customerName}</p>
-            <p className="text-[10px] text-zinc-650 mt-0.5">{data.customerPhone}</p>
-            {data.customerEmail && <p className="text-[10px] text-zinc-505 truncate">{data.customerEmail}</p>}
+            <p className={`text-xs font-bold ${paperText}`}>{data.customerName}</p>
+            <p className={`text-[10px] ${paperTextSec} mt-0.5`}>Phone: {data.customerPhone}</p>
+            {data.customerEmail && <p className={`text-[10px] ${paperTextSec} truncate`}>Email: {data.customerEmail}</p>}
           </div>
           <div>
-            <h4 className="text-[9px] uppercase font-extrabold tracking-wider text-zinc-400 block mb-1">
-              Reference Information
+            <h4 className={`text-[9px] uppercase font-extrabold tracking-wider ${paperLabelColor} block mb-1`}>
+              📄 Reference Details
             </h4>
-            <p className="text-[10px] font-mono text-zinc-700">
-              Reference Code: <span className="font-bold">{data.refCode || data.id}</span>
+            <p className={`text-[10px] font-mono ${paperTextSec}`}>
+              Ref Code: <span className="font-bold">{data.refCode || `HT-${data.id.substring(4)}`}</span>
             </p>
             {data.customerAddress && (
-              <p className="text-[10px] text-zinc-600 mt-1">
+              <p className={`text-[10px] ${paperTextSec} mt-1`}>
                 Address: {data.customerAddress}
               </p>
             )}
-            <p className="text-[10px] text-zinc-700 mt-1">
-              Destination Authority: <span className="font-bold">{type === 'Manager Request' ? 'General Manager' : 'Service Desk / Store Warehouse'}</span>
+            <p className={`text-[10px] ${paperTextSec} mt-1`}>
+              Authority: <span className="font-bold">{type === 'Manager Request' ? 'General Manager' : 'Service Desk / Warehouse'}</span>
             </p>
           </div>
         </div>
@@ -282,22 +423,22 @@ Contact: hitechdistributors@gmail.com
         {/* INVOICE & RECEIPT PRODUCTS LIST */}
         {(type === 'Invoice' || type === 'Receipt') && (
           <div className="space-y-4">
-            <div className="border border-zinc-200 rounded-lg overflow-hidden">
+            <div className={`border rounded-lg overflow-hidden ${paperBorder}`}>
               <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-100 uppercase tracking-wider text-[9px] text-zinc-500 border-b border-zinc-200">
+                <thead className={`uppercase tracking-wider text-[9px] border-b ${isReceipt ? 'bg-white/5 text-[#34a853] border-zinc-900' : 'bg-zinc-100 text-zinc-500 border-zinc-200'}`}>
                   <tr>
-                    <th className="p-2">Item Description</th>
+                    <th className="p-2">🛒 What was paid for / Item description</th>
                     <th className="p-2 text-center w-16">Qty</th>
                     <th className="p-2 text-right w-32">Price per unit</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-200">
+                <tbody className={`divide-y ${isReceipt ? 'divide-zinc-850' : 'divide-zinc-200'}`}>
                   {data.items && data.items.length > 0 ? (
                     data.items.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-zinc-50">
-                        <td className="p-2 font-medium text-zinc-800">{item.name}</td>
-                        <td className="p-2 text-center font-mono text-zinc-605">{item.qty}</td>
-                        <td className="p-2 text-right font-mono font-bold text-zinc-800">{item.price}</td>
+                      <tr key={idx} className={isReceipt ? 'hover:bg-white/5' : 'hover:bg-zinc-50'}>
+                        <td className={`p-2 font-medium ${paperText}`}>{item.name}</td>
+                        <td className={`p-2 text-center font-mono ${paperTextSec}`}>{item.qty}</td>
+                        <td className={`p-2 text-right font-mono font-bold ${paperText}`}>{item.price}</td>
                       </tr>
                     ))
                   ) : (
@@ -309,25 +450,83 @@ Contact: hitechdistributors@gmail.com
               </table>
             </div>
 
-            <div className="flex justify-between items-start bg-zinc-50 p-3 rounded-lg border border-zinc-200">
-              {data.bankDetails ? (
-                <div className="text-[10px] text-zinc-500 space-y-0.5">
-                  <p className="font-bold uppercase text-zinc-700 text-[9px] tracking-wider mb-1">🏦 Payment Account Vouchers</p>
-                  <p>Bank Name: <span className="font-bold font-mono text-zinc-800">{data.bankDetails.bank}</span></p>
-                  <p>No: <span className="font-bold font-mono text-zinc-800">{data.bankDetails.accountNumber}</span></p>
-                  <p>Acc Name: <span className="font-medium text-zinc-800">{data.bankDetails.accountName}</span></p>
+            {/* Payment Details Section */}
+            <div className={`p-3 rounded-lg border ${paperCardBg} ${paperBorder} text-[10px] space-y-1.5`}>
+              <h4 className={`text-[9px] uppercase font-bold tracking-wider ${paperLabelColor}`}>💰 Payment details</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`space-y-0.5 ${paperTextSec}`}>
+                  <p>Purpose: <span className={`font-bold ${paperText}`}>{type === 'Receipt' ? (data.purpose || 'Sales Order') : 'Sales Order Invoice'}</span></p>
+                  <p>Method: <span className={`font-bold ${paperText}`}>{data.paymentMethod || 'Bank Transfer'}</span></p>
+                  <p>Status: <span className="font-extrabold text-[#34a853]">✅ CONFIRMED</span></p>
+                  <p>Date: <span className={`font-medium ${paperText}`}>{data.date}</span></p>
                 </div>
-              ) : (
-                <div className="text-[10px] text-zinc-400 italic">No direct bank voucher requested.</div>
-              )}
-              <div className="text-right space-y-1">
-                <p className="text-[10px] text-zinc-400 uppercase font-extrabold tracking-wider">Grand Total</p>
-                <p className="text-lg font-mono font-extrabold text-zinc-900">
-                  ₦{(data.totalAmount || 0).toLocaleString()}
-                </p>
-                <p className="text-[9px] text-zinc-500 italic">
-                  {type === 'Receipt' ? '🟢 Payment Received & Confirmed' : '🔵 Pending Payment Settlement'}
-                </p>
+                <div className={`space-y-0.5 ${paperTextSec} text-right border-l pl-4 ${isReceipt ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                  <p className="text-[9px] text-zinc-400 uppercase font-extrabold tracking-wider">Amount Paid</p>
+                  <p className="text-base font-mono font-extrabold text-[#34a853]">
+                    ₦{(data.totalAmount || 0).toLocaleString()}
+                  </p>
+                  {data.balanceRemaining !== undefined ? (
+                    <p className={`text-[9px] font-mono font-bold ${data.balanceRemaining > 0 ? 'text-amber-500 animate-pulse' : 'text-[#34a853]'}`}>
+                      Balance: ₦{(data.balanceRemaining || 0).toLocaleString()} {data.balanceRemaining > 0 ? '⚠️ OWING' : '✅ PAID IN FULL'}
+                    </p>
+                  ) : (
+                    <p className="text-[9px] font-mono font-bold text-[#34a853]">
+                      Balance: ₦0.00 ✅ PAID IN FULL
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              <div className={`border-t pt-2 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[9.5px]/relaxed ${paperTextSec} ${isReceipt ? 'border-zinc-850' : 'border-zinc-250'}`}>
+                <div>
+                  <span className="block uppercase text-[8px] font-bold text-zinc-400">Merchant Bank Instructions:</span>
+                  <span>Bank Name: <strong className={paperText}>{data.bankDetails?.bank || 'GTBank'}</strong></span><br />
+                  <span>Account Name: <strong className={paperText}>{data.bankDetails?.accountName || 'HiTech Distributors'}</strong></span><br />
+                  <span>Account Number: <strong className={paperText}>{data.bankDetails?.accountNumber || '9006163631'}</strong></span>
+                  <br /><span>Paying Bank: <strong className={paperText}>{data.bankDetails?.payingBank || 'UBA'}</strong></span>
+                </div>
+                <div className="sm:text-right">
+                  <span className="block uppercase text-[8px] font-bold text-zinc-400">Reconciliation:</span>
+                  <span>Transaction Ref: <strong className="font-mono text-xs text-[#34a853]">{data.transactionRef || `ABR_${Math.floor(100000 + Math.random() * 899999)}_${Math.floor(1000 + Math.random() * 8999)}`}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Structured CONTACT US Section */}
+            <div className={`mt-4 p-3 rounded-lg border ${isReceipt ? 'bg-white/5 border-zinc-850' : 'bg-zinc-50 border-zinc-200'} text-[10.5px]`}>
+              <div className="flex items-center gap-1.5 font-bold uppercase text-[9px] tracking-wider mb-2" style={{ color: scheme.primary }}>
+                <Phone className="w-4 h-4" />
+                <span>📞 CONTACT US</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 font-mono">
+                <div className="flex justify-between border-b pb-0.5 border-dashed" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>🏢 Front Desk:</span>
+                  <span className="font-bold">+234 703 272 4432</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>💰 Sales & Orders:</span>
+                  <span className="font-bold">09166241953</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>🛒 Sales Rep:</span>
+                  <span className="font-bold">+234 814 482 4531</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>🔧 Repairs:</span>
+                  <span className="font-bold">+234 803 483 2773</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed col-span-1 sm:col-span-2" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>⭐ General Manager:</span>
+                  <span className="font-bold">+234 803 217 5552</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed col-span-1 sm:col-span-2" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>✉️ Email 1:</span>
+                  <span className="font-bold select-all">hitechdistributors@gmail.com</span>
+                </div>
+                <div className="flex justify-between border-b pb-0.5 border-dashed col-span-1 sm:col-span-2" style={{ borderColor: isReceipt ? '#262626' : '#e5e7eb' }}>
+                  <span className={`${isReceipt ? 'text-zinc-400' : 'text-zinc-500'}`}>✉️ Email 2:</span>
+                  <span className="font-bold select-all">hitechd@hitechd.com</span>
+                </div>
               </div>
             </div>
           </div>
@@ -344,7 +543,7 @@ Contact: hitechdistributors@gmail.com
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-400 uppercase font-extrabold tracking-wider block mb-0.5">Diagnosis Brand / Model</span>
-                  <span className="font-bold text-zinc-800">{data.brand}</span>
+                  <span className="font-bold text-zinc-805">{data.brand}</span>
                 </div>
               </div>
               <div className="border-t border-zinc-200 pt-2.5">
@@ -460,6 +659,61 @@ Contact: hitechdistributors@gmail.com
           <span>© 1999–2026 HITECH Ltd.</span>
         </div>
       </div>
+
+      {/* Document Link Display Section */}
+      {(type === 'Invoice' || type === 'Receipt') && (
+        <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-3 no-print max-w-2xl mx-auto text-xs w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400 font-mono text-[10px] uppercase font-bold tracking-wider">Access Link:</span>
+            <span className="text-[#34a853] font-mono font-bold select-all">{window.location.hostname || 'hitech.distributors'}/?view={data.id}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const fullUrl = `${window.location.origin}/?view=${data.id}`;
+              navigator.clipboard.writeText(fullUrl);
+              alert(`Copied link to clipboard: ${fullUrl}`);
+            }}
+            className="px-3 py-1.5 bg-zinc-850 hover:bg-zinc-800 text-white rounded font-bold font-mono text-[9px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border border-zinc-700"
+          >
+            <Copy className="w-3" style={{ height: '12px' }} />
+            <span>Copy Access Link</span>
+          </button>
+        </div>
+      )}
+
+      {/* Download Action Buttons */}
+      <div className="download-buttons flex gap-3 justify-center mt-5 flex-wrap w-full md:flex-row flex-col no-print">
+        <button
+          type="button"
+          onClick={downloadPNG}
+          disabled={downloading}
+          className="btn-png bg-[#1a73e8] hover:opacity-90 active:scale-95 transition-all text-white px-6 py-3 border-0 rounded-lg text-base cursor-pointer flex items-center justify-center gap-2 font-bold w-full md:w-auto h-12 shadow-lg hover:shadow-blue-600/20 disabled:opacity-50"
+        >
+          <span>📷 Download as PNG</span>
+        </button>
+        <button
+          type="button"
+          onClick={downloadPDF}
+          disabled={downloading}
+          className="btn-pdf bg-[#dc3545] hover:opacity-90 active:scale-95 transition-all text-white px-6 py-3 border-0 rounded-lg text-base cursor-pointer flex items-center justify-center gap-2 font-bold w-full md:w-auto h-12 shadow-lg hover:shadow-red-600/20 disabled:opacity-50"
+        >
+          <span>📄 Download as PDF</span>
+        </button>
+      </div>
+
+      {/* Processing Loader Overlay */}
+      {downloading && (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-50 rounded-xl space-y-3 no-print animate-fade-in">
+          <div className="w-10 h-10 border-4 border-t-[#F5C518] border-zinc-800 rounded-full animate-spin"></div>
+          <p className="text-xs font-bold font-mono tracking-widest text-zinc-300 uppercase animate-pulse">
+            Compiling High-Quality Copy...
+          </p>
+          <p className="text-[10px] text-zinc-500 font-mono text-center max-w-[250px] px-4">
+            Building with 300 DPI layout scaling for optimal print definition.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,8 +9,8 @@ import {
   Contact as ContactIcon, ShieldCheck, MapPin, Star, ShieldAlert, Cpu, Landmark,
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
-  Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink,
-  LifeBuoy, HelpCircle, Phone, Clock, Calendar, Award
+  Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink, Settings,
+  LifeBuoy, HelpCircle, Phone, Clock, Calendar, Award, Smartphone
 } from 'lucide-react';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket, ManagerRequestTicket } from './types';
@@ -29,11 +29,25 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
 import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
+import * as XLSX from 'xlsx';
 
 export default function App() {
   // Navigation: "landing" | "main-app"
   const [view, setView] = useState<'landing' | 'main-app'>('landing');
   const [currentRoom, setCurrentRoom] = useState<string>('gallery');
+
+  // Handle cross-component decoupled room switching
+  useEffect(() => {
+    const handleSwitchRoom = (e: Event) => {
+      const customEvt = e as CustomEvent<string>;
+      if (customEvt.detail) {
+        setView('main-app');
+        setCurrentRoom(customEvt.detail);
+      }
+    };
+    window.addEventListener('switch-room', handleSwitchRoom);
+    return () => window.removeEventListener('switch-room', handleSwitchRoom);
+  }, []);
   const [activeCategory, setActiveCategory] = useState<string | null>(null); // for Showroom item collection
   const [solarFilter, setSolarFilter] = useState<string>('All');
   const [videoSearchQuery, setVideoSearchQuery] = useState<string>('');
@@ -585,9 +599,10 @@ export default function App() {
   } | null>(null);
   
   const [bankAccount, setBankAccount] = useState({
-    bank: 'Access Bank PLC',
-    accountNumber: '1482993021',
-    accountName: 'HiTech Distributors Nigeria'
+    bank: 'GTBank',
+    accountNumber: '9006163631',
+    accountName: 'HiTech Distributors',
+    payingBank: 'UBA'
   });
 
   const [openingPhotoUrl, setOpeningPhotoUrl] = useState(() => {
@@ -661,6 +676,27 @@ export default function App() {
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
+    }
+  });
+
+  const [displayFloorActiveLayout, setDisplayFloorActiveLayout] = useState<string>(() => {
+    return localStorage.getItem('ht_display_floor_active') || '1, 2, 3, 4, 14, 25, 30, 42, 44, 45, 46, 47, 48, 49, 55, 56, 58';
+  });
+
+  const [displayFloorSavedConfigs, setDisplayFloorSavedConfigs] = useState<{ [name: string]: string }>(() => {
+    try {
+      const stored = localStorage.getItem('ht_display_floor_saved');
+      return stored ? JSON.parse(stored) : {
+        "Default": "1, 2, 3, 4, 14, 25, 30, 42",
+        "Promo High": "14, 25, 30, 42, 44",
+        "Seasonal Deals": "45, 46, 47, 48, 49"
+      };
+    } catch {
+      return {
+        "Default": "1, 2, 3, 4, 14, 25, 30, 42",
+        "Promo High": "14, 25, 30, 42, 44",
+        "Seasonal Deals": "45, 46, 47, 48, 49"
+      };
     }
   });
 
@@ -818,6 +854,257 @@ export default function App() {
     }
   };
 
+  const [csvUploadStatus, setCsvUploadStatus] = useState<string>(() => {
+    return localStorage.getItem('ht_csv_upload_status') || 'No Google Sheets CSV imported yet';
+  });
+
+  const parseCSVBytes = (text: string) => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let inQuotes = false;
+    let currentToken = "";
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentToken += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentToken.trim());
+        currentToken = "";
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(currentToken.trim());
+        if (row.length > 0 && row.some(cell => cell !== "")) {
+          lines.push(row);
+        }
+        row = [];
+        currentToken = "";
+      } else {
+        currentToken += char;
+      }
+    }
+    if (currentToken || row.length > 0) {
+      row.push(currentToken.trim());
+      if (row.some(cell => cell !== "")) {
+        lines.push(row);
+      }
+    }
+    return lines;
+  };
+
+  const handleDownloadTemplate = () => {
+    const csvContent = [
+      "Display Order,Brand,Product Code,Category,Description Headline,Description Bullets,Technical Specs,Price (₦),Stock Status,Floor Display (Yes/No),Front Image (Cloudinary),Side Image (Cloudinary),Back Image (Cloudinary),Top Image (Cloudinary),Video (Cloudinary),Staff Notes,Needs Verification",
+      "1,HP,PRO-X360,Laptops,ProBook x360 435 G10,Slick 2-in-1 convertible touchscreen laptop ideal for professionals.,AMD Ryzen 5 • 16GB RAM • 512GB SSD • Windows 11 Pro,₦650000,In Stock,Yes,https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=600,https://images.unsplash.com/photo-1593642532400-2682810df593?w=300,,,https://www.w3sheets.com/sample-video.mp4,Premium performance built to last,No",
+      "2,Epson,ECO-L3250,Printers,EcoTank L3250 Wi-Fi,High performance cartridge-free color printing scanning and copying.,Wi-Fi Direct • Borderless Printing • High Yield Ink Bottles,₦220000,In Stock,Yes,https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=600,,,,,,Excellent low cost printing,No"
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "hitech_sheets_template.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleUploadCSV = async (file: File) => {
+    try {
+      let allRows: string[][] = [];
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+      if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        allRows = jsonData.map(row => 
+          (row || []).map(cell => cell !== null && cell !== undefined ? String(cell) : "")
+        );
+      } else {
+        const text = await file.text();
+        allRows = parseCSVBytes(text);
+      }
+
+      if (allRows.length < 2) {
+        alert("Empty or invalid Google Sheets/Excel file uploaded. Please make sure headers are present.");
+        return;
+      }
+
+      const headers = allRows[0].map(h => h.trim().toLowerCase());
+      
+      const getColIdx = (aliases: string[]) => {
+        return headers.findIndex(h => aliases.some(alias => h === alias || h.includes(alias)));
+      };
+
+      const idxDisplayOrder = getColIdx(['display order']);
+      const idxBrand = getColIdx(['brand']);
+      const idxProductCode = getColIdx(['product code', 'prod code', 'code']);
+      const idxCategory = getColIdx(['category', 'cat']);
+      const idxDescHeadline = getColIdx(['description headline', 'headline']);
+      const idxDescBullets = getColIdx(['description bullets', 'bullets']);
+      const idxTechSpecs = getColIdx(['technical specs', 'specs', 'spec']);
+      const idxPrice = getColIdx(['price (₦)', 'price', 'naira price']);
+      const idxFrontImage = getColIdx(['front image']);
+      const idxSideImage = getColIdx(['side image']);
+      const idxBackImage = getColIdx(['back image']);
+      const idxTopImage = getColIdx(['top image']);
+      const idxVideo = getColIdx(['video (cloudinary)', 'video']);
+
+      const dataRows = allRows.slice(1);
+      const parsedProducts: Product[] = [];
+      const parsedPhotos: any[] = [];
+      const parsedVideos: any[] = [];
+
+      dataRows.forEach((row, rowIndex) => {
+        const prodCode = idxProductCode !== -1 ? (row[idxProductCode] || '').trim() : `X-${1000 + rowIndex}`;
+        if (!prodCode) return;
+
+        const displayOrder = idxDisplayOrder !== -1 ? (row[idxDisplayOrder] || '').trim() : '';
+        const brand = idxBrand !== -1 ? (row[idxBrand] || '').trim() : 'HITECH';
+        const categoryPhrase = idxCategory !== -1 ? (row[idxCategory] || '').trim() : 'Accessories';
+        const descHeadline = idxDescHeadline !== -1 ? (row[idxDescHeadline] || '').trim() : '';
+        const descBullets = idxDescBullets !== -1 ? (row[idxDescBullets] || '').trim() : '';
+        const techSpecs = idxTechSpecs !== -1 ? (row[idxTechSpecs] || '').trim() : '';
+        const price = idxPrice !== -1 ? (row[idxPrice] || '').trim() : 'CALL';
+        const frontImage = idxFrontImage !== -1 ? (row[idxFrontImage] || '').trim() : '';
+        const video = idxVideo !== -1 ? (row[idxVideo] || '').trim() : '';
+
+        // Category mapping
+        const catStr = categoryPhrase.toLowerCase();
+        let catId = 'accessories';
+        if (catStr.includes('laptop')) catId = 'laptops';
+        else if (catStr.includes('printer')) catId = 'printers';
+        else if (catStr.includes('desktop') || catStr.includes('all-in-one') || catStr.includes('pc')) catId = 'desktops';
+        else if (catStr.includes('camera')) catId = 'cameras';
+        else if (catStr.includes('cctv') || catStr.includes('security')) catId = 'cctv';
+        else if (catStr.includes('network')) catId = 'networking';
+        else if (catStr.includes('monitor')) catId = 'monitors';
+        else if (catStr.includes('software')) catId = 'software';
+        else if (catStr.includes('phone') || catStr.includes('tablet')) catId = 'phones_tablets';
+        else if (catStr.includes('solar')) catId = 'solar_hub';
+
+        // Unique numeric ID based on code hash
+        let codeHash = 0;
+        for (let c = 0; c < prodCode.length; c++) {
+          codeHash += prodCode.charCodeAt(c);
+        }
+        const numericId = 100000 + (codeHash * 73) % 899999 + rowIndex;
+
+        const combinedSpecs = techSpecs || descBullets || "Certified original setup hardware system.";
+
+        const newProd: Product = {
+          id: numericId,
+          pn: prodCode,
+          cat: catId,
+          n: `${brand} ${descHeadline || 'System'}`.trim(),
+          sp: combinedSpecs,
+          price: price.startsWith('₦') ? price : `₦${price}`,
+          desc: descBullets || descHeadline || 'Awaiting supervisor technical inspection clearance.',
+          imageUrl: frontImage || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300",
+          displayOrder: displayOrder
+        };
+        parsedProducts.push(newProd);
+
+        if (frontImage) {
+          parsedPhotos.push({
+            id: `sheet_front_${prodCode}`,
+            url: frontImage,
+            label: `${brand} ${descHeadline}`.trim() + " (Front View)",
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price.startsWith('₦') ? price : `₦${price}`,
+            isCustom: true
+          });
+        }
+        
+        const sideImage = idxSideImage !== -1 ? (row[idxSideImage] || '').trim() : '';
+        if (sideImage) {
+          parsedPhotos.push({
+            id: `sheet_side_${prodCode}`,
+            url: sideImage,
+            label: `${brand} (Side View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const backImage = idxBackImage !== -1 ? (row[idxBackImage] || '').trim() : '';
+        if (backImage) {
+          parsedPhotos.push({
+            id: `sheet_back_${prodCode}`,
+            url: backImage,
+            label: `${brand} (Back View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const topImage = idxTopImage !== -1 ? (row[idxTopImage] || '').trim() : '';
+        if (topImage) {
+          parsedPhotos.push({
+            id: `sheet_top_${prodCode}`,
+            url: topImage,
+            label: `${brand} (Top View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        if (video) {
+          parsedVideos.push({
+            id: `sheet_vid_${prodCode}`,
+            url: video,
+            title: `${brand} ${descHeadline} Walkthrough Video`.trim(),
+            desc: `Imported automated short demo clip. Code: ${prodCode}`
+          });
+        }
+      });
+
+      if (parsedProducts.length === 0) {
+        alert("No valid product items could be parsed from the CSV rows.");
+        return;
+      }
+
+      await handleUpdateProducts(parsedProducts);
+      if (parsedPhotos.length > 0) {
+        await saveGalleryPhotosToStorage([...parsedPhotos, ...galleryPhotos]);
+      }
+      if (parsedVideos.length > 0) {
+        setGalleryVideos(prev => {
+          const joined = [...parsedVideos, ...prev];
+          localStorage.setItem('ht_videos', JSON.stringify(joined));
+          return joined;
+        });
+      }
+
+      const statusText = `✅ Google Sheets data loaded successfully! 📊 ${parsedProducts.length} products loaded`;
+      setCsvUploadStatus(statusText);
+      localStorage.setItem('ht_csv_upload_status', statusText);
+      alert(statusText);
+    } catch (err: any) {
+      alert("Error parsing and uploading sheets data: " + err.message);
+    }
+  };
+
   // Gallery view dedicated state controls
   const [gallerySelectedCode, setGallerySelectedCode] = useState<string>('');
   const [gallerySearchQuery, setGallerySearchQuery] = useState<string>('');
@@ -828,7 +1115,7 @@ export default function App() {
   const [productSearchTerm, setProductSearchTerm] = useState<string>('');
   const [productCatFilter, setProductCatFilter] = useState<string>('All');
   const [createProductType, setCreateProductType] = useState<'standard' | 'solar'>('standard');
-  const [newProductForm, setNewProductForm] = useState<Partial<Product>>({ pn: '', n: 'Unmade', cat: 'laptops', sp: '', price: 'CALL', desc: '' });
+  const [newProductForm, setNewProductForm] = useState<Partial<Product>>({ pn: '', n: 'Unmade', cat: 'laptops', sp: '', price: 'CALL', desc: '', displayOrder: '' });
   const [newSolarForm, setNewSolarForm] = useState<Partial<SolarProduct>>({ id: '', cat: 'Inverters', n: '', brand: '', sp: '', price: '₦', desc: '' });
 
   // Typewriter sequence
@@ -1281,6 +1568,96 @@ export default function App() {
     localStorage.setItem('ht_solar_cart', JSON.stringify(updatedSolarCart));
   };
 
+  const renderCompactProductCard = (
+    prod: any,
+    onAdd: () => void,
+    onView: () => void,
+    badgeText?: string
+  ) => {
+    const isDeal = !!prod.salePrice;
+    const isSolar = !!prod.watts || !!prod.volts || !!prod.maxLoadWatts;
+
+    const brandText = isDeal ? 'PROMO' : isSolar ? (prod.brand || 'CONFIG') : 'HITECH';
+    const catText = isDeal ? prod.badge : isSolar ? prod.type || 'SOLAR' : prod.cat;
+    const codeText = prod.pn || prod.modelId || prod.id;
+    
+    const titleText = isDeal ? prod.title : isSolar ? prod.spec || prod.n : prod.n;
+    const descText = prod.desc || '';
+    const specText = isDeal ? '' : prod.sp || '';
+    
+    const priceText = isDeal ? prod.salePrice : prod.price;
+
+    return (
+      <div key={prod.id || codeText} className="bg-[rgba(255,255,255,0.05)] border border-white/10 rounded-lg p-[10px] flex flex-col w-full h-[420px] shrink-0 text-left">
+        
+        {/* Upper Area with Image and Dots */}
+        <div className="relative border border-[#212121] rounded bg-black flex flex-col justify-between h-[160px] shrink-0">
+          <div className="flex justify-center gap-2 pt-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#F5C518]"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
+          </div>
+          <div className="flex-1 flex justify-center items-center overflow-hidden p-2">
+              <img src={prod.imageUrl || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300"} alt={titleText} className="max-h-full object-contain" />
+          </div>
+        </div>
+
+        {/* Badges Gap 2px */}
+        <div className="flex items-center gap-[2px] mt-2 mb-[2px]">
+          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
+            {brandText}
+          </div>
+          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
+            {catText}
+          </div>
+          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-500 uppercase truncate flex-1">
+            CODE: {codeText}
+          </div>
+        </div>
+
+        <hr className="border-t border-[#333] my-[2px]"/>
+        <div className="text-[10px] text-zinc-400 font-sans leading-tight line-clamp-2 min-h-[28px] my-[2px]">
+          {descText}
+        </div>
+        <hr className="border-t border-[#333] my-[2px]"/>
+        <div className="text-[9px] text-zinc-300 font-mono leading-tight truncate my-[2px]">
+          {specText ? "• " + specText.split(', ').join(' • ') : "• Standard specifications • Certified"}
+        </div>
+        <hr className="border-t border-[#333] my-[2px]"/>
+        <div className="text-xs font-bold text-zinc-100 truncate my-[2px] flex items-center gap-1">
+          <span>⚙️</span>
+          <span className="truncate">{titleText}</span>
+        </div>
+        <hr className="border-t border-[#333] my-[2px]"/>
+        <div className="flex justify-between items-center my-[2px]">
+          <div className="text-sm font-black text-[#F5C518] font-mono">{priceText}</div>
+          <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+            In Stock
+          </div>
+        </div>
+        <hr className="border-t border-[#333] my-[2px]"/>
+        <div className="flex justify-between items-center my-[2px] text-[9px]">
+          <div className="font-bold text-red-500 flex items-center gap-1 uppercase truncate flex-1 mr-1">
+            🔥 {badgeText || (isDeal ? prod.badge || "PROMO" : "POPULAR MODEL")}
+          </div>
+          <div className="text-blue-400 cursor-pointer hover:underline shrink-0" onClick={(e) => { e.stopPropagation(); alert("4.8/5 Stars from recent showroom pickups."); }}>👥 See what others think</div>
+        </div>
+        <hr className="border-t border-[#333] my-[2px] mt-auto" />
+        <div className="flex gap-2 pt-1 mt-[2px]">
+          <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-600 rounded text-[10px] font-bold py-1.5 uppercase transition">
+            🛒 ADD TO ORDER
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onView(); }} className="flex-1 bg-[#F5C518]/10 hover:bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 rounded text-[10px] font-bold py-1.5 uppercase transition">
+            🔍 VIEW DETAILS
+          </button>
+        </div>
+
+      </div>
+    );
+  };
+
   const handleUpdateProducts = async (updatedProds: Product[]) => {
     setProductsList(updatedProds);
     localStorage.setItem('ht_products', JSON.stringify(updatedProds));
@@ -1517,6 +1894,18 @@ export default function App() {
       await setDoc(doc(db, 'app_config', 'cloudinary'), config);
     } catch (err) {
       console.warn("Cloudinary configuration cloud update offline fallback: ", err);
+    }
+  };
+
+  const handleSaveDisplayFloor = async (activeLayout: string, savedConfigs: { [name: string]: string }) => {
+    setDisplayFloorActiveLayout(activeLayout);
+    setDisplayFloorSavedConfigs(savedConfigs);
+    localStorage.setItem('ht_display_floor_active', activeLayout);
+    localStorage.setItem('ht_display_floor_saved', JSON.stringify(savedConfigs));
+    try {
+      await setDoc(doc(db, 'app_config', 'display_floor'), { activeLayout, savedConfigs });
+    } catch (err) {
+      console.warn("Display floor config cloud update offline fallback: ", err);
     }
   };
 
@@ -2106,7 +2495,7 @@ Message: ${quickMessageText}`;
   // Transfer resolved/severe complaint to General Manager (+234 803 217 5552)
   const handleTransferToGM = (ticket: EscalationTicket) => {
     const gmMessage = `HiTech Distributors General Manager Escalation\n` +
-      `Transferred by Service Advisor (Ese) \n\n` +
+      `Transferred by Service Advisor \n\n` +
       `Ticket Ref: ${ticket.id}\n` +
       `Client: ${ticket.fullName} (${ticket.phone})\n` +
       `Issue: ${ticket.description}\n` +
@@ -2153,6 +2542,9 @@ Message: ${quickMessageText}`;
       case 'Shield': return <Shield className="w-4 h-4 text-zinc-400" />;
       case 'Wifi': return <Wifi className="w-4 h-4 text-zinc-400" />;
       case 'Tv': return <Tv className="w-4 h-4 text-zinc-400" />;
+      case 'Cpu': return <Cpu className="w-4 h-4 text-zinc-400" />;
+      case 'Smartphone': return <Smartphone className="w-4 h-4 text-zinc-400" />;
+      case 'Sun': return <Sun className="w-4 h-4 text-zinc-400" />;
       default: return <ShoppingBag className="w-4 h-4 text-zinc-400" />;
     }
   };
@@ -2238,8 +2630,9 @@ Message: ${quickMessageText}`;
       text += `Account Number: ${bankAccount.accountNumber}\n\n`;
       text += `─────────────────────────────────\n\n`;
       text += `📋 View Full Order:\n`;
-      text += `👉 HiTech Order #${invCode}\n`;
-      text += `[TAP TO VIEW]: ${cleanLink}\n\n`;
+      text += `👉 HiTech Invoice #${invCode}\n`;
+      text += `[TAP TO VIEW]: ${cleanLink}\n`;
+      text += `Tap to view and download your invoice as PNG or PDF.\n\n`;
       text += `⚠️ Please process this order and confirm receipt.\n`;
     } else {
       text += `🟢 HITECH DISTRIBUTORS\n`;
@@ -2250,7 +2643,7 @@ Message: ${quickMessageText}`;
       text += `─────────────────────────────────\n\n`;
       text += `Receipt #: ${invCode}\n`;
       text += `Date: ${docData.date}\n`;
-      text += `Issued By: Lucy (Sales & Orders)\n\n`;
+      text += `Issued By: Sales & Orders\n\n`;
       text += `👤 Customer:\n`;
       text += `Name: ${clientName}\n`;
       text += `Ref Code: HT-${invCode.substring(4)}\n\n`;
@@ -2275,7 +2668,8 @@ Message: ${quickMessageText}`;
       text += `─────────────────────────────────\n\n`;
       text += `📋 View Official Receipt:\n`;
       text += `👉 HiTech Receipt #${invCode}\n`;
-      text += `[TAP TO VIEW]: ${cleanLink}\n\n`;
+      text += `[TAP TO VIEW]: ${cleanLink}\n`;
+      text += `Tap to view and download your receipt as PNG or PDF.\n\n`;
       text += `─────────────────────────────────\n\n`;
       text += `Thank you for choosing HiTech Distributors!\n`;
     }
@@ -2417,7 +2811,7 @@ Message: ${quickMessageText}`;
                   /* Expanded category products list */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-[#262626] pb-2">
-                      <button 
+                       <button 
                         onClick={() => setActiveCategory(null)}
                         className="text-xs text-[#F5C518] hover:underline flex items-center gap-1 font-semibold"
                       >
@@ -2428,43 +2822,74 @@ Message: ${quickMessageText}`;
                       </span>
                     </div>
 
-                    <div className="space-y-2.5">
-                      {productsList.filter(p => p.cat === activeCategory).map(prod => (
-                        <div 
-                          key={prod.id} 
-                          className="bg-[#141414] border border-[#262626] p-3 rounded-xl flex items-center gap-3 hover:border-zinc-700 transition"
+                    {/* Quick Add Product inside Active Category */}
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-left no-print">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] uppercase font-mono font-bold text-[#F5C518] tracking-wider">Quick Actions for: {activeCategory}</span>
+                        <p className="text-[10px] text-zinc-400 uppercase font-bold">Instantiate a brand new system directly under this showroom partition catalog.</p>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isStaffLoggedIn) {
+                              setCurrentRoom('staff');
+                              alert("Please sign back into your staff terminal account or simulate front desk operator level access first.");
+                            } else {
+                              setCurrentRoom('gallery');
+                              setGalleryTab('manage_products');
+                              setManageInventoryType('standard');
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial text-center bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-[#F5C518] px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <div
-                            onClick={() => setSelectedProduct(prod)}
-                            className="flex-1 cursor-pointer min-w-0"
-                          >
-                            <h4 className="text-xs font-bold text-zinc-200 truncate">{prod.n}</h4>
-                            <p className="text-[10px] text-zinc-500 truncate mt-0.5">{prod.sp}</p>
-                            <span className="text-xs text-[#F5C518] font-mono font-bold mt-1 inline-block">{prod.price}</span>
-                          </div>
-                          
-                          <div className="shrink-0 flex items-center gap-1.5">
-                            {prod.price !== 'CALL' && (
-                              <button 
-                                onClick={() => {
-                                  addToCart(prod.id);
-                                  alert(`Added ${prod.n} to cart`);
-                                }}
-                                className="px-2 py-1 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded text-[11px] font-bold transition-all"
-                              >
-                                + Cart
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setSelectedProduct(prod)}
-                              className="text-zinc-500 hover:text-zinc-300 text-xs px-1"
-                              title="Details"
-                            >
-                              Details
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                          <Settings className="w-3.5 h-3.5" />
+                          <span>Manage systems</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isStaffLoggedIn) {
+                              setCurrentRoom('staff');
+                              alert("Please sign back into your staff terminal account to instantiate new store database records.");
+                            } else {
+                              setNewProductForm({
+                                id: Date.now(),
+                                pn: 'HT-' + String(Date.now()).slice(-4),
+                                cat: activeCategory,
+                                n: 'New ' + activeCategory.slice(0, -1) + ' System',
+                                sp: 'Core specifications waiting to be verified by supervisor',
+                                price: 'CALL',
+                                desc: 'Imported and certified by HiTech Distributors showroom logistics.'
+                              });
+                              setCreateProductType('standard');
+                              setShowCreateProductModal(true);
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial text-center bg-[#F5C518] hover:bg-amber-500 text-zinc-950 px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Create Product</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
+                      {productsList.filter(p => p.cat === activeCategory).map(prod => {
+                        const bPhoto = galleryPhotos.find(gp => gp.productCode === prod.pn);
+                        const itemWithImage = {
+                          ...prod,
+                          imageUrl: bPhoto ? bPhoto.url : prod.imageUrl
+                        };
+                        return renderCompactProductCard(
+                          itemWithImage,
+                          () => {
+                            addToCart(prod.id);
+                            alert(`Added ${prod.n} to cart`);
+                          },
+                          () => setSelectedProduct(itemWithImage)
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
@@ -2474,6 +2899,58 @@ Message: ${quickMessageText}`;
                       <h2 className="text-xs font-mono font-bold uppercase tracking-[0.15em] text-zinc-400">HiTech Emporium</h2>
                       <p className="text-xl font-bold text-[#f5f5f5] mt-1 pr-1 font-serif">Original Quality Computers</p>
                       <p className="text-[10px] text-zinc-500 mt-1">6 Airport Road, Warri · Delta State, Nigeria</p>
+                    </div>
+
+                    {/* Dynamic Inventory Ops Panel in Showroom Home */}
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-left no-print">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] uppercase font-mono font-bold text-[#F5C518] tracking-wider">Showroom Inventory Desk</span>
+                        <p className="text-[10px] text-zinc-400 uppercase font-bold">Authorized staff can manage showroom systems and instantiate new inventory specs.</p>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isStaffLoggedIn) {
+                              setCurrentRoom('staff');
+                              alert("Please sign back into your staff terminal account or simulate front desk operator level access first.");
+                            } else {
+                              setCurrentRoom('gallery');
+                              setGalleryTab('manage_products');
+                              setManageInventoryType('standard');
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial text-center bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-[#F5C518] px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                          <span>Manage Catalog</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isStaffLoggedIn) {
+                              setCurrentRoom('staff');
+                              alert("Please sign back into your staff terminal account to instantiate new store database records.");
+                            } else {
+                              setNewProductForm({
+                                id: Date.now(),
+                                pn: 'HT-' + String(Date.now()).slice(-4),
+                                cat: 'laptops',
+                                n: 'New Product System',
+                                sp: 'Core specifications waiting to be verified by supervisor',
+                                price: 'CALL',
+                                desc: 'Imported and certified by HiTech Distributors showroom logistics.'
+                              });
+                              setCreateProductType('standard');
+                              setShowCreateProductModal(true);
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial text-center bg-[#F5C518] hover:bg-amber-500 text-zinc-950 px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase font-black tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Create Product</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -3536,6 +4013,17 @@ Message: ${quickMessageText}`;
                           </div>
 
                           <div>
+                            <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Display Floor Order (e.g. 1, 30)</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. 1"
+                              className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                              value={editingProduct.displayOrder || ''}
+                              onChange={e => setEditingProduct({ ...editingProduct, displayOrder: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
                             <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical Specifications</label>
                             <textarea 
                               rows={2}
@@ -3914,230 +4402,7 @@ Message: ${quickMessageText}`;
                     </div>
                   )}
 
-                  {/* CREATE PRODUCT MODAL */}
-                  {showCreateProductModal && (
-                    <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex justify-center items-center z-50 p-4">
-                      <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
-                        <div className="flex justify-between items-center border-b border-[#212121] pb-2">
-                          <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">➕ Create New Product Card</h3>
-                          <button type="button" onClick={() => setShowCreateProductModal(false)} className="text-zinc-500 hover:text-zinc-350 p-1">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {/* SELECT TYPE TO CREATE */}
-                        <div className="flex bg-zinc-950 border border-zinc-900 rounded p-1 gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setCreateProductType('standard')}
-                            className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
-                              createProductType === 'standard' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
-                            }`}
-                          >
-                            Standard Product
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCreateProductType('solar')}
-                            className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
-                              createProductType === 'solar' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
-                            }`}
-                          >
-                            Solar Package
-                          </button>
-                        </div>
-
-                        <div className="space-y-3 text-[11px] max-h-[55vh] overflow-y-auto pr-1 scrollbar-none">
-                          {createProductType === 'standard' ? (
-                            <>
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Part Number (Product Code)</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g. PN-HP430"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
-                                  value={newProductForm.pn || ''}
-                                  onChange={e => setNewProductForm({ ...newProductForm, pn: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Name</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="or leave as 'Unmade'"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
-                                  value={newProductForm.n || ''}
-                                  onChange={e => setNewProductForm({ ...newProductForm, n: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category</label>
-                                <select 
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none"
-                                  value={newProductForm.cat || 'laptops'}
-                                  onChange={e => setNewProductForm({ ...newProductForm, cat: e.target.value })}
-                                >
-                                  {CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price Marker</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g. ₦1,250,000 or CALL"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
-                                  value={newProductForm.price || 'CALL'}
-                                  onChange={e => setNewProductForm({ ...newProductForm, price: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Specification Specs</label>
-                                <textarea 
-                                  rows={2}
-                                  placeholder="Enter hardware particulars..."
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
-                                  value={newProductForm.sp || ''}
-                                  onChange={e => setNewProductForm({ ...newProductForm, sp: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Detailed Description</label>
-                                <textarea 
-                                  rows={2}
-                                  placeholder="Enter overview notes"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
-                                  value={newProductForm.desc || ''}
-                                  onChange={e => setNewProductForm({ ...newProductForm, desc: e.target.value })}
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Configuration unique ID</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g. SOLAR-LITHIUM-G1"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700 uppercase"
-                                  value={newSolarForm.id || ''}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, id: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Equipment Brand</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g. Felicity, Huawei"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700 font-mono"
-                                  value={newSolarForm.brand || ''}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, brand: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Model Name / Capacity</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="or leave as 'Unmade'"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
-                                  value={newSolarForm.n || ''}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, n: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category Selection</label>
-                                <select 
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none animate-fade-in"
-                                  value={newSolarForm.cat || 'Inverters'}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, cat: e.target.value as any })}
-                                >
-                                  {['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Pricing Detail</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g. ₦1,250,000"
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
-                                  value={newSolarForm.price || '₦'}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, price: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical specification block</label>
-                                <textarea 
-                                  rows={2}
-                                  placeholder="Describe capacities, voltages, sizes..."
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
-                                  value={newSolarForm.sp || ''}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, sp: e.target.value })}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Package listings / Description</label>
-                                <textarea 
-                                  rows={2}
-                                  placeholder="Enter list of items included..."
-                                  className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
-                                  value={newSolarForm.desc || ''}
-                                  onChange={e => setNewSolarForm({ ...newSolarForm, desc: e.target.value })}
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (createProductType === 'standard') {
-                              if (!newProductForm.pn || !newProductForm.pn.trim()) return alert("Part Number (code) is required!");
-                              const payload: Product = {
-                                id: Number(newProductForm.id || Date.now()),
-                                pn: newProductForm.pn.trim(),
-                                cat: newProductForm.cat || 'laptops',
-                                n: (newProductForm.n || 'Unmade').trim(),
-                                sp: newProductForm.sp || 'System specifications pending customer verification',
-                                price: newProductForm.price || 'CALL',
-                                desc: newProductForm.desc || 'Awaiting complete technical specification details.'
-                              };
-                              await handleSaveProduct(payload);
-                            } else {
-                              if (!newSolarForm.id || !newSolarForm.id.trim()) return alert("Solar configuration ID is required!");
-                              const payload: SolarProduct = {
-                                id: newSolarForm.id.trim().toUpperCase(),
-                                cat: newSolarForm.cat as any || 'Inverters',
-                                n: (newSolarForm.n || 'Unmade').trim(),
-                                brand: (newSolarForm.brand || 'Generic').trim(),
-                                sp: newSolarForm.sp || 'System specifications pending customer verification',
-                                price: newSolarForm.price || '₦',
-                                desc: newSolarForm.desc || 'Awaiting complete technical specification details.'
-                              };
-                              await handleSaveSolarProduct(payload);
-                            }
-                            setShowCreateProductModal(false);
-                            alert("🎉 System product registered inside database!");
-                          }}
-                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-[#0a0a0a] text-xs uppercase rounded-lg transition-colors"
-                        >
-                          Create System Product Spec
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {/* CREATE PRODUCT MODAL MOVED TO TOP LEVEL IN APP PORTAL */}
 
                 </div>
               );
@@ -4460,69 +4725,262 @@ Message: ${quickMessageText}`;
               );
             })()}
 
-            {/* ROOM 3: SOLAR HUB & SMART CALCULATOR */}
-            {currentRoom === 'solar' && (
-              <div className="p-4 space-y-4">
-                <div className="bg-[#141414] border border-[#262626] p-4 rounded-xl text-center">
-                  <h2 className="text-xs font-mono uppercase text-zinc-400 font-bold tracking-[0.2em]">HiTech Solar</h2>
-                  <p className="text-md font-serif font-bold text-[#f5f5f5] mt-1 pr-1">Pure Sine Wave Solar Sizing Systems</p>
+            {/* ROOM 3: DISPLAY FLOOR */}
+            {currentRoom === 'displayfloor' && (
+              <div className="p-4 space-y-4 text-left font-sans animate-fade-in">
+                <div className="text-center mb-1">
+                  <h2 className="text-xs font-mono text-[#F5C518] uppercase tracking-[0.2em] font-extrabold flex items-center justify-center gap-1.5">
+                    <LayoutGrid className="w-4 h-4 text-[#F5C518]" />
+                    <span>HiTech Display Floor</span>
+                  </h2>
+                  <p className="text-md font-serif font-bold text-zinc-200">Store Physical Floor Layout</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase max-w-sm mx-auto">
+                    Mirroring the active physical setup and display order configuration of the Warri showroom.
+                  </p>
                 </div>
 
-                {/* AI Calculator Integration */}
-                <SolarSizingTool 
-                  onAddSolarProduct={addToSolarCart} 
-                  onNavigate={setCurrentRoom}
-                />
+                {/* Google Sheets CSV Upload Zone */}
+                <div id="sheets-upload-card" className="bg-zinc-950/80 border border-[#F5C518]/20 rounded-2xl p-4 space-y-3 shadow-lg relative select-none">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1 text-left">
+                      <span className="text-[10px] uppercase tracking-wider font-mono font-bold text-[#F5C518] block">🔗 Google Sheets & Excel Active Syncflow</span>
+                      <p className="text-xs text-zinc-300 font-sans">
+                        Export your primary showroom product catalogue as a standard CSV, or upload an Excel (.xlsx/.xls) file directly to synchronize standard categories, prices, images, and walkthroughs instantly.
+                      </p>
+                    </div>
 
-                {/* Filter list */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 text-[10px] uppercase font-bold scrollbar-none">
-                  {['All', 'Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers'].map(filter => (
-                    <button
-                      key={filter}
-                      onClick={() => setSolarFilter(filter)}
-                      className={`px-3 py-1.5 rounded-full border transition whitespace-nowrap ${
-                        solarFilter === filter 
-                          ? 'bg-[#F5C518] text-[#0a0a0a] border-[#F5C518]' 
-                          : 'bg-[#141414] text-zinc-400 border-[#262626] hover:text-zinc-200'
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Solar Products Feed */}
-                <div className="space-y-2.5">
-                  {solarProductsList.filter(s => solarFilter === 'All' || s.cat === solarFilter).map(item => (
-                    <div 
-                      key={item.id} 
-                      className="bg-[#141414] border border-[#262626] p-3 rounded-xl flex items-center justify-between gap-3 text-left hover:border-zinc-700 transition"
-                    >
-                      <div 
-                        onClick={() => setSelectedProduct(item)}
-                        className="flex-1 min-w-0 cursor-pointer"
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <button
+                        id="download-template-btn"
+                        onClick={handleDownloadTemplate}
+                        className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-[#F5C518] px-4 py-2.5 rounded-xl text-xs font-mono font-black uppercase transition-all shadow-md hover:scale-[1.02] active:scale-[0.98]"
                       >
-                        <h4 className="text-xs font-bold text-zinc-100 truncate">{item.n}</h4>
-                        <p className="text-[9px] text-[#F5C518] bg-amber-500/10 inline-block px-1.5 rounded font-bold font-mono mt-0.5">{item.brand}</p>
-                        <p className="text-[10px] text-zinc-500 truncate mt-1">{item.sp}</p>
-                        <span className="text-xs font-mono text-[#F5C518] font-bold block mt-1">{item.price}</span>
-                      </div>
+                        <span>📥 Download Template</span>
+                      </button>
 
-                      <div className="shrink-0 flex items-center gap-1.5">
-                        <button 
-                          onClick={() => {
-                            addToSolarCart(item.id);
-                            alert(`Added ${item.n} to solar invoice list`);
+                      <label id="sheets-upload-label" className="flex items-center gap-2 bg-[#F5C518] hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-mono font-black uppercase transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer">
+                        <span>📤 Upload Sheets/Excel</span>
+                        <input
+                          id="sheets-csv-input"
+                          type="file"
+                          accept=".csv,.xlsx,.xls"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              await handleUploadCSV(file);
+                            }
                           }}
-                          className="px-2 py-1 bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-300 rounded font-bold"
-                        >
-                          + Solar
-                        </button>
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {csvUploadStatus && (
+                    <div className="bg-black/60 border border-zinc-900 rounded-lg p-2.5 flex items-center gap-2 justify-between animate-fade-in">
+                      <div className="flex items-center gap-2 text-xs font-mono text-zinc-300 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>{csvUploadStatus}</span>
+                      </div>
+                      <button 
+                        id="clear-sheets-cache-btn"
+                        onClick={() => {
+                          if (window.confirm("Restore factory default catalogue? This will clear temporary Google Sheets imports.")) {
+                            setCsvUploadStatus('No Google Sheets CSV imported yet');
+                            localStorage.removeItem('ht_csv_upload_status');
+                            // Let the system reload standard values
+                            localStorage.removeItem('ht_products');
+                            localStorage.removeItem('ht_gallery_photos');
+                            localStorage.removeItem('ht_videos');
+                            window.location.reload();
+                          }
+                        }}
+                        className="text-zinc-500 hover:text-zinc-300 text-[9px] uppercase font-mono px-2 py-1 rounded border border-zinc-900 hover:border-zinc-800 transition"
+                      >
+                        Reset Catalogue
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Staff Configuration Workspace */}
+                {isStaffLoggedIn && (
+                  <div className="bg-zinc-950 border border-[#F5C518]/30 rounded-2xl p-4 space-y-3.5 no-print">
+                    <div className="flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+                      <ShieldAlert className="w-4 h-4 text-[#F5C518]" />
+                      <span className="text-xs font-mono font-black text-[#F5C518] uppercase">DISPLAY FLOOR CONTROLLER</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] uppercase font-mono font-extrabold text-zinc-400 block">Configure Active Layout Sequence (Comma-Separated Display Orders):</label>
+                      <textarea
+                        rows={2}
+                        className="w-full bg-black border border-zinc-900 rounded-lg p-2 font-mono text-xs text-zinc-200 focus:border-[#F5C518] outline-none"
+                        value={displayFloorActiveLayout}
+                        onChange={(e) => {
+                          const nextVal = e.target.value;
+                          setDisplayFloorActiveLayout(nextVal);
+                        }}
+                        onBlur={() => {
+                          handleSaveDisplayFloor(displayFloorActiveLayout || '', displayFloorSavedConfigs);
+                        }}
+                        placeholder="e.g. 1, 2, 14, 30"
+                      />
+                    </div>
+
+                    {/* Preconfigured Presets */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-mono text-zinc-400 block font-bold uppercase">Preconfigured Presets:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(displayFloorSavedConfigs).map(([name, seq]) => (
+                          <div key={name} className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-850 py-1 px-2.5 rounded-lg text-[10px] text-zinc-300 font-bold">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSaveDisplayFloor(seq as string, displayFloorSavedConfigs);
+                              }}
+                              className="hover:text-[#F5C518] transition uppercase"
+                            >
+                              📁 {name}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (name === 'Default') return alert("Cannot delete Default layout.");
+                                if (window.confirm(`Delete layout preset "${name}"?`)) {
+                                  const nextSaved = { ...displayFloorSavedConfigs };
+                                  delete nextSaved[name];
+                                  handleSaveDisplayFloor(displayFloorActiveLayout, nextSaved);
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-450 font-mono text-[9px] ml-1 px-1"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+
+                    {/* Save Current Layout */}
+                    <div className="pt-2 border-t border-zinc-900 flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        id="newPresetName"
+                        placeholder="New Preset Name"
+                        className="flex-1 bg-black border border-zinc-900 rounded-lg px-2.5 py-1.5 text-[10px] text-zinc-200 uppercase outline-none focus:border-zinc-700 font-mono"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const name = (e.currentTarget.value || '').trim();
+                            if (!name) return;
+                            const nextSaved = { ...displayFloorSavedConfigs, [name]: displayFloorActiveLayout };
+                            handleSaveDisplayFloor(displayFloorActiveLayout, nextSaved);
+                            e.currentTarget.value = '';
+                            alert(`Preset "${name}" successfully registered!`);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById('newPresetName') as HTMLInputElement;
+                          const name = (el?.value || '').trim();
+                          if (!name) return alert("Please type a name first.");
+                          const nextSaved = { ...displayFloorSavedConfigs, [name]: displayFloorActiveLayout };
+                          handleSaveDisplayFloor(displayFloorActiveLayout, nextSaved);
+                          el.value = '';
+                          alert(`Preset "${name}" saved!`);
+                        }}
+                        className="bg-zinc-900 text-[#F5C518] border border-zinc-805 hover:bg-zinc-850 text-[9px] font-mono font-bold uppercase py-1.5 px-3 rounded-lg"
+                      >
+                        Save Configuration
+                      </button>
+                    </div>
+
+                    {/* Inactive System Warnings display */}
+                    {(() => {
+                      const activeParts = displayFloorActiveLayout.split(',').map(s => s.trim()).filter(Boolean);
+                      const missingParts = activeParts.filter(partCode => {
+                        const match = productsList.find(p => p.displayOrder === partCode);
+                        return !match;
+                      });
+                      if (missingParts.length > 0) {
+                        return (
+                          <div className="bg-red-950/20 border border-red-900/40 p-2.5 rounded-lg text-[9px] text-red-300 font-mono space-y-1 animate-fade-in">
+                            <div className="flex items-center gap-1 font-bold uppercase text-red-400">
+                              <span>⚠️ NEEDS VERIFICATION: MISSING DATABASE RECORDS</span>
+                            </div>
+                            <p className="leading-relaxed">
+                              The current layout lists layout numbers not currently verified or bound to active systems:
+                            </p>
+                            <ul className="list-disc pl-3 mt-1 space-y-0.5">
+                              {missingParts.map(code => (
+                                <li key={code}>Display Order Number "{code}" is currently unbound</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                  </div>
+                )}
+
+                {/* Display Grid */}
+                <div className="space-y-3">
+                  {(() => {
+                    const seqList = displayFloorActiveLayout.split(',').map(s => s.trim()).filter(Boolean);
+                    
+                    let matchingItems: Product[] = [];
+                    if (seqList.length > 0) {
+                      matchingItems = seqList.map(code => {
+                        return productsList.find(p => p.displayOrder === code);
+                      }).filter(Boolean) as Product[];
+                    } else {
+                        // show all products if no selection mapped, or leave empty
+                        matchingItems = [...productsList].sort((a,b) => (a.n).localeCompare(b.n));
+                    }
+
+                    if (matchingItems.length === 0) {
+                      return (
+                        <div className="text-center py-12 text-zinc-650 font-mono text-[10px] bg-[#141414] border border-[#212121] rounded-2xl">
+                          NO ACTIVE SYSTEMS CURRENTLY BOUND TO DISPLAY FLOOR ORDER CODES.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div>
+                        <p className="text-[10px] text-zinc-500 font-mono mb-2 uppercase">{matchingItems.length} products shown</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
+                          {matchingItems.map(item => {
+                            const bPhoto = galleryPhotos.find(gp => gp.productCode === item.pn);
+                            const itemWithImage = {
+                              ...item,
+                              imageUrl: bPhoto ? bPhoto.url : item.imageUrl
+                            };
+                            return renderCompactProductCard(
+                              itemWithImage,
+                              () => {
+                                addToCart(item.id);
+                                alert(`Added ${item.n} to order catalog`);
+                              },
+                              () => setSelectedProduct(itemWithImage)
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
+
               </div>
+            )}
+
+            {/* ROOM 3: SOLAR PRE-SIZING ESTIMATOR */}
+            {currentRoom === 'solar' && (
+              <SolarSizingTool onAddSolarProduct={addToSolarCart} onNavigate={setCurrentRoom} />
             )}
 
             {/* ROOM 4: CHANNELS & DEEP LINKS */}
@@ -4587,7 +5045,7 @@ Message: ${quickMessageText}`;
 
                       <div className="flex justify-between items-center bg-[#0a0a0a] border border-[#262626] p-3 rounded-lg text-xs">
                         <div>
-                          <p className="font-bold text-zinc-200">General Coordinator Desk</p>
+                          <p className="font-bold text-[#F5C518]">General Coordinator Desk</p>
                           <p className="text-[10px] text-zinc-500">Warranty, repairs, and support</p>
                         </div>
                         <button 
@@ -4913,7 +5371,7 @@ Message: ${quickMessageText}`;
                       <span className="text-xs uppercase font-bold text-zinc-300 tracking-wider">Submit Escalation Ticket</span>
                     </div>
                     <p className="text-[10px] text-zinc-500 mt-1 uppercase leading-normal">
-                      If standard customer support was unable to solve your issue, launch a formal escalation. Your ticket will bypass standard waiting rooms and go directly to Ese's Desk.
+                      If standard customer support was unable to solve your issue, launch a formal escalation. Your ticket will bypass standard waiting rooms and go directly to the Service Advisor's Desk.
                     </p>
                   </div>
 
@@ -5127,34 +5585,19 @@ Message: ${quickMessageText}`;
                   <p className="text-md font-serif font-bold text-zinc-300">Emporium Clearance Corner</p>
                 </div>
 
-                <div className="space-y-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
                   {dealsList.map(item => (
-                    <div key={item.id} className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden shadow-sm relative text-left">
-                      {/* Badge Banner top-right */}
-                      <span className="absolute top-3 right-3 text-[9px] font-bold font-mono tracking-wider bg-red-600/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase">
-                        {item.badge}
-                      </span>
-
-                      <div className="p-4 space-y-2">
-                        <h4 className="text-xs font-bold text-zinc-200 pr-24 leading-snug">{item.title}</h4>
-                        <p className="text-[10px] text-zinc-400 font-sans leading-normal">{item.desc}</p>
-                        
-                        <div className="flex items-baseline gap-2 pt-2 border-t border-[#262626] mt-2">
-                          <span className="text-[10px] text-zinc-500 line-through font-mono">{item.origPrice}</span>
-                          <span className="text-sm font-bold text-[#F5C518] font-mono">{item.salePrice}</span>
-                        </div>
-
-                        <button 
-                          onClick={() => {
-                            const linkText = `Hello Sales! I am interested in claiming the posted promo deal: "${item.title}" on sale for ${item.salePrice}.`;
-                            openWhatsAppLink(contacts.sales, linkText);
-                          }}
-                          className="w-full mt-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded text-[10px] font-bold uppercase transition"
-                        >
-                          Claim Live Promo via WhatsApp →
-                        </button>
-                      </div>
-                    </div>
+                    renderCompactProductCard(
+                      {...item, badge: item.badge, desc: item.desc, n: item.title, pn: item.id},
+                      () => {
+                        const linkText = `Hello Sales! I am interested in claiming the posted promo deal: "${item.title}" on sale for ${item.salePrice}.`;
+                        openWhatsAppLink(contacts.sales, linkText);
+                      },
+                      () => {
+                        const linkText = `Hello Sales! I am interested in learning more about the promo deal: "${item.title}".`;
+                        openWhatsAppLink(contacts.sales, linkText);
+                      }
+                    )
                   ))}
                 </div>
               </div>
@@ -5570,7 +6013,7 @@ Message: ${quickMessageText}`;
                             if (!isStaffLoggedIn) {
                               setIsStaffLoggedIn(true);
                             }
-                            setStaffRole('Service Advisor Ese');
+                            setStaffRole('Service Advisor');
                           }}
                           className="px-2.5 py-1 rounded bg-purple-950/20 text-purple-300 border border-purple-800/30 hover:text-white"
                         >
@@ -6040,7 +6483,7 @@ Message: ${quickMessageText}`;
 
             {/* ROOM 13: REVIEWS & FEEDBACK */}
             {currentRoom === 'feedback' && (
-              <div className="p-4 space-y-4 text-left font-sans">
+              <div id="reviews-section" className="p-4 space-y-4 text-left font-sans">
                 <div className="text-center mb-1">
                   <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Public Testimonials</h2>
                   <p className="text-md font-serif font-bold text-zinc-300">Client Feedback Logistics</p>
@@ -6154,21 +6597,20 @@ Message: ${quickMessageText}`;
           <nav id="nav" className="fixed bottom-0 left-0 bg-[#0a0a0a] border-t border-[#262626] w-full flex overflow-x-auto select-none h-14 z-45 items-center scrollbar-none px-2 shrink-0 font-sans">
             {[
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },
-              { id: 'videogallery', label: 'Video Gallery', icon: <Video className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'videogallery', label: 'Videos', icon: <Video className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'displayfloor', label: 'Display Floor', icon: <LayoutGrid className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'solar', label: 'Solar Estimator', icon: <Sun className="w-4 h-4 text-amber-400" /> },
               { id: 'invoice', label: 'Orders', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },
-              { id: 'servicedesk', label: 'Service Desk', icon: <LifeBuoy className="w-4 h-4 text-[#F5C518]" /> },
-              { id: 'solar', label: 'Solar', icon: <Sun className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'channels', label: 'Channels', icon: <Radio className="w-4 h-4" /> },
-              { id: 'repair', label: 'Repair', icon: <Wrench className="w-4 h-4" /> },
+              { id: 'servicedesk', label: 'Ops Desk', icon: <LifeBuoy className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'repair', label: 'Repair', icon: <Wrench className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'deals', label: 'Deals', icon: <Tag className="w-4 h-4" /> },
-              { id: 'livesheet', label: 'Live', icon: <ListCollapse className="w-4 h-4" /> },
-              { id: 'info', label: 'AI', icon: <Bot className="w-4 h-4 text-[#F5C518]" /> },
-              { id: 'manager', label: 'Manager', icon: <ContactIcon className="w-4 h-4" /> },
-              { id: 'shadow', label: 'Shadow', icon: <ShieldCheck className="w-4 h-4" /> },
-              { id: 'contact', label: 'Contact', icon: <MapPin className="w-4 h-4 text-red-500" /> },
-              { id: 'feedback', label: 'Review', icon: <Star className="w-4 h-4 text-amber-500" /> },
-              { id: 'staff', label: 'Staff', icon: <ShieldAlert className="w-4 h-4" /> }
+              { id: 'pricelist', label: 'Price List', icon: <ListCollapse className="w-4 h-4" /> },
+              { id: 'info', label: 'AI Expert', icon: <Bot className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'manager', label: 'GM Desk', icon: <ContactIcon className="w-4 h-4" /> },
+              { id: 'feedback', label: 'Feedback', icon: <Star className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'staff', label: 'Staff Hub', icon: <ShieldAlert className="w-4 h-4" /> }
             ].map(tab => {
               const isActive = currentRoom === tab.id;
               return (
@@ -6246,6 +6688,243 @@ Message: ${quickMessageText}`;
         }}
         cloudinaryConfig={cloudinaryConfig}
       />
+
+      {/* DOCUMENT PREVIEW OVERLAY MODAL */}
+      {showCreateProductModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+          <div className="bg-[#121212] border border-[#262626] rounded-2xl w-full max-w-[390px] p-4 shadow-2xl relative animate-slide-up text-left space-y-4">
+            <div className="flex justify-between items-center border-b border-[#212121] pb-2">
+              <h3 className="text-xs font-mono font-bold text-[#F5C518] uppercase">➕ Create New Product Card</h3>
+              <button type="button" onClick={() => setShowCreateProductModal(false)} className="text-zinc-500 hover:text-zinc-350 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* SELECT TYPE TO CREATE */}
+            <div className="flex bg-zinc-950 border border-zinc-900 rounded p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setCreateProductType('standard')}
+                className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
+                  createProductType === 'standard' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Standard Product
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateProductType('solar')}
+                className={`flex-1 py-1 text-center text-[9px] font-bold rounded transition ${
+                  createProductType === 'solar' ? 'bg-[#F5C518] text-black font-extrabold' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Solar Package
+              </button>
+            </div>
+
+            <div className="space-y-3 text-[11px] max-h-[55vh] overflow-y-auto pr-1 scrollbar-none">
+              {createProductType === 'standard' ? (
+                <>
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Part Number (Product Code)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. PN-HP430"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                      value={newProductForm.pn || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, pn: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Product Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="or leave as 'Unmade'"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                      value={newProductForm.n || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, n: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category</label>
+                    <select 
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none"
+                      value={newProductForm.cat || 'laptops'}
+                      onChange={e => setNewProductForm({ ...newProductForm, cat: e.target.value })}
+                    >
+                      {CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Price Marker</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. ₦1,250,000 or CALL"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                      value={newProductForm.price || 'CALL'}
+                      onChange={e => setNewProductForm({ ...newProductForm, price: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Specification Specs</label>
+                    <textarea 
+                      rows={2}
+                      placeholder="Enter hardware particulars..."
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                      value={newProductForm.sp || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, sp: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Detailed Description</label>
+                    <textarea 
+                      rows={2}
+                      placeholder="Enter overview notes"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                      value={newProductForm.desc || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, desc: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Display Floor Order (e.g. 1, 30)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 1"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                      value={newProductForm.displayOrder || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, displayOrder: e.target.value })}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Configuration unique ID</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. SOLAR-LITHIUM-G1"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700 uppercase"
+                      value={newSolarForm.id || ''}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, id: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Equipment Brand</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Felicity, Huawei"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700 font-mono"
+                      value={newSolarForm.brand || ''}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, brand: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Model Name / Capacity</label>
+                    <input 
+                      type="text" 
+                      placeholder="or leave as 'Unmade'"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                      value={newSolarForm.n || ''}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, n: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Category Selection</label>
+                    <select 
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none animate-fade-in"
+                      value={newSolarForm.cat || 'Inverters'}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, cat: e.target.value as any })}
+                    >
+                      {['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Pricing Detail</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. ₦1,250,000"
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-[#F5C518] font-bold font-mono outline-none focus:border-zinc-700"
+                      value={newSolarForm.price || '₦'}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, price: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Technical specification block</label>
+                    <textarea 
+                      rows={2}
+                      placeholder="Describe capacities, voltages, sizes..."
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 font-mono outline-none focus:border-zinc-700"
+                      value={newSolarForm.sp || ''}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, sp: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-mono text-zinc-500 font-bold uppercase block mb-1">Package listings / Description</label>
+                    <textarea 
+                      rows={2}
+                      placeholder="Enter list of items included..."
+                      className="w-full bg-zinc-950 border border-zinc-900 p-2 rounded text-zinc-100 outline-none focus:border-zinc-700"
+                      value={newSolarForm.desc || ''}
+                      onChange={e => setNewSolarForm({ ...newSolarForm, desc: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                if (createProductType === 'standard') {
+                  if (!newProductForm.pn || !newProductForm.pn.trim()) return alert("Part Number (code) is required!");
+                  const payload: Product = {
+                    id: Number(newProductForm.id || Date.now()),
+                    pn: newProductForm.pn.trim(),
+                    cat: newProductForm.cat || 'laptops',
+                    n: (newProductForm.n || 'Unmade').trim(),
+                    sp: newProductForm.sp || 'System specifications pending customer verification',
+                    price: newProductForm.price || 'CALL',
+                    desc: newProductForm.desc || 'Awaiting complete technical specification details.',
+                    displayOrder: (newProductForm.displayOrder || '').trim()
+                  };
+                  await handleSaveProduct(payload);
+                } else {
+                  if (!newSolarForm.id || !newSolarForm.id.trim()) return alert("Solar configuration ID is required!");
+                  const payload: SolarProduct = {
+                    id: newSolarForm.id.trim().toUpperCase(),
+                    cat: newSolarForm.cat as any || 'Inverters',
+                    n: (newSolarForm.n || 'Unmade').trim(),
+                    brand: (newSolarForm.brand || 'Generic').trim(),
+                    sp: newSolarForm.sp || 'System specifications pending customer verification',
+                    price: newSolarForm.price || '₦',
+                    desc: newSolarForm.desc || 'Awaiting complete technical specification details.'
+                  };
+                  await handleSaveSolarProduct(payload);
+                }
+                setShowCreateProductModal(false);
+                alert("🎉 System product registered inside database!");
+              }}
+              className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-[#0a0a0a] text-xs uppercase rounded-lg transition-colors"
+            >
+              Create System Product Spec
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* DOCUMENT PREVIEW OVERLAY MODAL */}
       {activeViewDocument && (

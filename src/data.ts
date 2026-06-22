@@ -29,7 +29,7 @@ export const CATS: Category[] = [
   },
   {
     id: 'desktops',
-    name: 'Desktops',
+    name: 'Desktops & All-in-One PCs',
     icon: 'Monitor',
     description: 'HP ProOne, EliteDesk, Dell, Lenovo All-in-Ones and workstations'
   },
@@ -41,7 +41,7 @@ export const CATS: Category[] = [
   },
   {
     id: 'cctv',
-    name: 'CCTV & Security',
+    name: 'CCTV',
     icon: 'Shield',
     description: 'CCTV packages, DVR/NVR systems, Kaspersky security software'
   },
@@ -68,6 +68,18 @@ export const CATS: Category[] = [
     name: 'Accessories',
     icon: 'ShoppingBag',
     description: 'Bags, mice, keyboards, cables, Bluegate UPS and stabilizers'
+  },
+  {
+    id: 'phones_tablets',
+    name: 'Phones & Tablets',
+    icon: 'Smartphone',
+    description: 'Apple iPad, Samsung Galaxy Tabs, professional smartphones and mobile hubs'
+  },
+  {
+    id: 'solar_hub',
+    name: 'Solar Equipment Hub',
+    icon: 'Sun',
+    description: 'Hybrid pure sine wave inverters, Lithium / Tubular battery banks, panels sizing tools'
   }
 ];
 

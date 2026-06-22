@@ -21,6 +21,7 @@ export interface Product {
   newp?: boolean;
   desc: string;
   imageUrl?: string; // Cache for AI generated photo
+  displayOrder?: string; // display floor layout order
 }
 
 export type SolarCat = 'Inverters' | 'Lithium Batteries' | 'Tubular Battery' | 'Solar Panels' | 'Controllers' | 'Cables' | 'All-in-One';
@@ -92,6 +93,7 @@ export interface AppState {
     bank: string;
     accountNumber: string;
     accountName: string;
+    payingBank?: string;
   };
 }
 
@@ -121,4 +123,5 @@ export interface ManagerRequestTicket {
   createdAt: string;
   gmNotes?: string;
 }
+
 
