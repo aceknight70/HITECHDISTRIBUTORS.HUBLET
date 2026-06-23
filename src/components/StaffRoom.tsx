@@ -2263,6 +2263,19 @@ export default function StaffRoom({
                       <MessageSquare className="w-3 h-3 text-emerald-500" />
                       <span>Ping Client</span>
                     </a>
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm('⚠️ Are you sure you want to permanently delete this repair ticket?')) {
+                          const updated = repairs.filter(r => r.id !== rep.id);
+                          onUpdateRepairs(updated);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 text-[9px] bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-950/50 py-0.5 px-2 rounded font-bold uppercase transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
               ))
@@ -2596,6 +2609,20 @@ export default function StaffRoom({
                     ) : (
                       <span className="text-[10px] text-zinc-500 line-through bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded font-bold uppercase">Addressed</span>
                     )}
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm("⚠️ Are you sure you want to permanently delete this GM request?")) {
+                          const updated = gmq.filter(q => q.id !== req.id);
+                          onUpdateGmq(updated);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 p-1 px-2.5 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-950 rounded text-[10px] uppercase font-extrabold transition cursor-pointer"
+                      title="Delete GM request"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
               ))

@@ -10,7 +10,7 @@ import {
   Send, Plus, Minus, Trash2, Home, MessageSquare, Laptop, Printer, Monitor,
   Camera, Shield, Wifi, Tv, ShoppingBag, Sparkles, Upload, Search,
   Edit, Pencil, Lock, Unlock, Check, X, Video, Play, ExternalLink, Settings,
-  LifeBuoy, HelpCircle, Phone, Clock, Calendar, Award, Smartphone
+  LifeBuoy, HelpCircle, Phone, Clock, Calendar, Award, Smartphone, FileSpreadsheet
 } from 'lucide-react';
 
 import { Product, SolarProduct, RepairRecord, GMRequest, Deal, Review, AppState, EscalationTicket, ManagerRequestTicket } from './types';
@@ -30,6 +30,169 @@ import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
 import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
 import * as XLSX from 'xlsx';
+
+export interface CompactProductCardProps {
+  key?: any;
+  prod: any;
+  onAdd: () => void;
+  onView: () => void;
+  badgeText?: string;
+  galleryPhotos: any[];
+}
+
+export function CompactProductCard({
+  prod,
+  onAdd,
+  onView,
+  badgeText,
+  galleryPhotos
+}: CompactProductCardProps) {
+  const [activeDot, setActiveDot] = useState(0);
+
+  const isDeal = !!prod.salePrice;
+  const isSolar = !!prod.watts || !!prod.volts || !!prod.maxLoadWatts;
+
+  const brandText = isDeal ? 'PROMO' : isSolar ? (prod.brand || 'CONFIG') : 'HITECH';
+  const catText = isDeal ? prod.badge : isSolar ? prod.type || 'SOLAR' : prod.cat;
+  const codeText = prod.pn || prod.modelId || prod.id;
+  
+  const titleText = isDeal ? prod.title : isSolar ? prod.spec || prod.n : prod.n;
+  const descText = prod.desc || '';
+  const specText = isDeal ? '' : prod.sp || '';
+  
+  const priceText = isDeal ? prod.salePrice : prod.price;
+
+  // Resolve 5 views
+  const code = prod.pn || prod.id;
+  
+  // 1. Front View URL
+  const frontItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_front_${code}`);
+  const frontUrl = frontItem?.url || null;
+  
+  // 2. Side View URL
+  const sideItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_side_${code}`);
+  const sideUrl = sideItem?.url || null;
+  
+  // 3. Back View URL
+  const backItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_back_${code}`);
+  const backUrl = backItem?.url || null;
+  
+  // 4. Top View URL
+  const topItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_top_${code}`);
+  const topUrl = topItem?.url || null;
+
+  // 5. Manual Upload URL
+  const manualItem = galleryPhotos.find(p => p.productCode === code && !p.id.startsWith('sheet_'));
+  let manualUrl = manualItem?.url || manualItem?.fallbackUrl || null;
+
+  if (!manualUrl && prod.imageUrl) {
+    const isFallback = prod.imageUrl.includes('unsplash.com') || prod.imageUrl === 'https://images.unsplash.com/photo-1593642532400-2682810df593?w=300';
+    if (!isFallback && prod.imageUrl !== frontUrl) {
+      manualUrl = prod.imageUrl;
+    }
+  }
+
+  const defaultFallback = prod.imageUrl || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300";
+  const fallbackFront = frontUrl || defaultFallback;
+  const displayedManual = manualUrl || fallbackFront;
+
+  // 5 dot images
+  const dotImages = [
+    displayedManual,               // Dot 1: Manual Upload (image uploaded manually, fallback to Front)
+    frontUrl || defaultFallback,   // Dot 2: Front (Cloudinary)
+    sideUrl || defaultFallback,    // Dot 3: Side (Cloudinary)
+    backUrl || defaultFallback,    // Dot 4: Back (Cloudinary)
+    topUrl || defaultFallback      // Dot 5: Top (Cloudinary)
+  ];
+
+  const activeImageUrl = dotImages[activeDot];
+
+  return (
+    <div className="bg-[rgba(255,255,255,0.05)] border border-white/10 rounded-lg p-[10px] flex flex-col w-full h-[420px] shrink-0 text-left">
+      
+      {/* Upper Area with Image and Dots */}
+      <div className="relative border border-[#212121] rounded bg-black flex flex-col justify-between h-[160px] shrink-0">
+        <div className="flex justify-center gap-2 pt-2 z-10">
+          {dotImages.map((img, index) => {
+            const label = ['Manual', 'Front', 'Side', 'Back', 'Top'][index];
+            const isActive = activeDot === index;
+            return (
+              <button
+                key={index}
+                type="button"
+                title={label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveDot(index);
+                }}
+                className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
+                  isActive 
+                    ? 'bg-[#F5C518] scale-[1.25]' 
+                    : 'bg-zinc-600 hover:bg-zinc-400'
+                }`}
+              />
+            );
+          })}
+        </div>
+        <div className="flex-1 flex justify-center items-center overflow-hidden p-2">
+          <img src={activeImageUrl} alt={titleText} className="max-h-full object-contain" />
+        </div>
+      </div>
+
+      {/* Badges Gap 2px */}
+      <div className="flex items-center gap-[2px] mt-2 mb-[2px]">
+        <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
+          {brandText}
+        </div>
+        <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
+          {catText}
+        </div>
+        <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-500 uppercase truncate flex-1">
+          CODE: {codeText}
+        </div>
+      </div>
+
+      <hr className="border-t border-[#333] my-[2px]"/>
+      <div className="text-[10px] text-zinc-400 font-sans leading-tight line-clamp-2 min-h-[28px] my-[2px]">
+        {descText}
+      </div>
+      <hr className="border-t border-[#333] my-[2px]"/>
+      <div className="text-[9px] text-zinc-300 font-mono leading-tight truncate my-[2px]">
+        {specText ? "• " + specText.split(', ').join(' • ') : "• Standard specifications • Certified"}
+      </div>
+      <hr className="border-t border-[#333] my-[2px]"/>
+      <div className="text-xs font-bold text-zinc-100 truncate my-[2px] flex items-center gap-1">
+        <span>⚙️</span>
+        <span className="truncate">{titleText}</span>
+      </div>
+      <hr className="border-t border-[#333] my-[2px]"/>
+      <div className="flex justify-between items-center my-[2px]">
+        <div className="text-sm font-black text-[#F5C518] font-mono">{priceText}</div>
+        <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+          In Stock
+        </div>
+      </div>
+      <hr className="border-t border-[#333] my-[2px]"/>
+      <div className="flex justify-between items-center my-[2px] text-[9px]">
+        <div className="font-bold text-red-500 flex items-center gap-1 uppercase truncate flex-1 mr-1">
+          🔥 {badgeText || (isDeal ? prod.badge || "PROMO" : "POPULAR MODEL")}
+        </div>
+        <div className="text-blue-400 cursor-pointer hover:underline shrink-0" onClick={(e) => { e.stopPropagation(); alert("4.8/5 Stars from recent showroom pickups."); }}>👥 See what others think</div>
+      </div>
+      <hr className="border-t border-[#333] my-[2px] mt-auto" />
+      <div className="flex gap-2 pt-1 mt-[2px]">
+        <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-600 rounded text-[10px] font-bold py-1.5 uppercase transition">
+          🛒 ADD TO ORDER
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onView(); }} className="flex-1 bg-[#F5C518]/10 hover:bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 rounded text-[10px] font-bold py-1.5 uppercase transition">
+          🔍 VIEW DETAILS
+        </button>
+      </div>
+
+    </div>
+  );
+}
 
 export default function App() {
   // Navigation: "landing" | "main-app"
@@ -52,6 +215,7 @@ export default function App() {
   const [solarFilter, setSolarFilter] = useState<string>('All');
   const [videoSearchQuery, setVideoSearchQuery] = useState<string>('');
   const [videoCategoryFilter, setVideoCategoryFilter] = useState<string>('All');
+  const [hideMissingLayoutWarnings, setHideMissingLayoutWarnings] = useState<boolean>(false);
 
   // Typewriter HITECH landing letters
   const [typewriterLetters, setTypewriterLetters] = useState<string[]>([]);
@@ -319,6 +483,7 @@ export default function App() {
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [uploadVideoProgress, setUploadVideoProgress] = useState<string>('');
   const videoFileInputRef = React.useRef<HTMLInputElement>(null);
+  const sheetFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const generateThumbnailAndDuration = (file: File): Promise<{ thumbnailBase64: string, durationStr: string }> => {
     return new Promise((resolve) => {
@@ -736,6 +901,37 @@ export default function App() {
 
   const [activeManagerTab, setActiveManagerTab] = useState<'sales' | 'inventory' | 'gm'>('sales');
 
+  const [sheetSearchString, setSheetSearchString] = useState<string>('');
+
+  const [spreadsheetHeaders, setSpreadsheetHeaders] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('ht_spreadsheet_headers');
+      return saved ? JSON.parse(saved) : [
+        "Display Order", "Brand", "Product Code", "Category", "Description Headline", "Description Bullets", "Technical Specs", "Price (₦)", "Stock Status", "Floor Display (Yes/No)", "Front Image (Cloudinary)", "Side Image (Cloudinary)", "Back Image (Cloudinary)", "Top Image (Cloudinary)", "Video (Cloudinary)", "Staff Notes", "Needs Verification"
+      ];
+    } catch {
+      return [
+        "Display Order", "Brand", "Product Code", "Category", "Description Headline", "Description Bullets", "Technical Specs", "Price (₦)", "Stock Status", "Floor Display (Yes/No)", "Front Image (Cloudinary)", "Side Image (Cloudinary)", "Back Image (Cloudinary)", "Top Image (Cloudinary)", "Video (Cloudinary)", "Staff Notes", "Needs Verification"
+      ];
+    }
+  });
+
+  const [spreadsheetRows, setSpreadsheetRows] = useState<string[][]>(() => {
+    try {
+      const saved = localStorage.getItem('ht_spreadsheet_rows');
+      return saved ? JSON.parse(saved) : [
+        ["1", "HP", "PRO-X360", "Laptops", "ProBook x360 435 G10", "Slick 2-in-1 convertible touchscreen laptop ideal for professionals.", "AMD Ryzen 5 • 16GB RAM • 512GB SSD • Windows 11 Pro", "650000", "In Stock", "Yes", "https://images.unsplash.com/photo-1593642532823-8f785ba67e45?w=600", "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300", "", "", "https://www.w3sheets.com/sample-video.mp4", "Premium performance built to last", "No"],
+        ["2", "Epson", "ECO-L3250", "Printers", "EcoTank L3250 Wi-Fi", "High performance cartridge-free color printing scanning and copying.", "Wi-Fi Direct • Borderless Printing • High Yield Ink Bottles", "220000", "In Stock", "Yes", "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=600", "", "", "", "", "Excellent low cost printing", "No"]
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  const [editingCell, setEditingCell] = useState<{ rIdx: number; cIdx: number; value: string } | null>(null);
+  const [activeEditRowIdx, setActiveEditRowIdx] = useState<number | null>(null);
+  const [draftRowValues, setDraftRowValues] = useState<string[] | null>(null);
+
   // Client info for Invoice checkout
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
@@ -997,6 +1193,8 @@ export default function App() {
       const idxBackImage = getColIdx(['back image']);
       const idxTopImage = getColIdx(['top image']);
       const idxVideo = getColIdx(['video (cloudinary)', 'video']);
+      const idxAssurance = getColIdx(['assurance text', 'assurance', 'footer']);
+      const idxStockStatus = getColIdx(['stock status', 'stock', 'status']);
 
       const dataRows = allRows.slice(1);
       const parsedProducts: Product[] = [];
@@ -1018,6 +1216,8 @@ export default function App() {
         const price = idxPrice !== -1 ? (row[idxPrice] || '').trim() : 'CALL';
         const frontImage = idxFrontImage !== -1 ? (row[idxFrontImage] || '').trim() : '';
         const video = idxVideo !== -1 ? (row[idxVideo] || '').trim() : '';
+        const assurance = idxAssurance !== -1 ? (row[idxAssurance] || '').trim() : (row[9] || '').trim();
+        const stockStatus = idxStockStatus !== -1 ? (row[idxStockStatus] || '').trim() : (row[17] || row[8] || 'In Stock').trim();
 
         // Category mapping
         const catStr = categoryPhrase.toLowerCase();
@@ -1042,16 +1242,20 @@ export default function App() {
 
         const combinedSpecs = techSpecs || descBullets || "Certified original setup hardware system.";
 
-        const newProd: Product = {
+        const newProd: Product | any = {
           id: numericId,
           pn: prodCode,
           cat: catId,
+          brand: brand,
           n: `${brand} ${descHeadline || 'System'}`.trim(),
           sp: combinedSpecs,
           price: price.startsWith('₦') ? price : `₦${price}`,
           desc: descBullets || descHeadline || 'Awaiting supervisor technical inspection clearance.',
           imageUrl: frontImage || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300",
-          displayOrder: displayOrder
+          displayOrder: displayOrder,
+          assurance: assurance,
+          stockStatus: stockStatus,
+          bullets: descBullets
         };
         parsedProducts.push(newProd);
 
@@ -1150,9 +1354,215 @@ export default function App() {
       const statusText = `✅ Google Sheets data loaded successfully! 📊 ${parsedProducts.length} products loaded`;
       setCsvUploadStatus(statusText);
       localStorage.setItem('ht_csv_upload_status', statusText);
+      
+      if (allRows.length > 0) {
+        setSpreadsheetHeaders(allRows[0]);
+        setSpreadsheetRows(allRows.slice(1));
+        localStorage.setItem('ht_spreadsheet_headers', JSON.stringify(allRows[0]));
+        localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(allRows.slice(1)));
+      }
+
       alert(statusText);
     } catch (err: any) {
       alert("Error parsing and uploading sheets data: " + err.message);
+    }
+  };
+
+  const handleSyncSpreadsheetToDatabase = async (customHeaders: string[], customRows: string[][], isSilent: boolean = false) => {
+    try {
+      if (customRows.length === 0) {
+        if (!isSilent) alert("Cannot sync an empty spreadsheet. Please add at least one product row.");
+        return;
+      }
+
+      const headers = customHeaders.map(h => h.trim().toLowerCase());
+      
+      const getColIdx = (aliases: string[]) => {
+        return headers.findIndex(h => aliases.some(alias => h === alias || h.includes(alias)));
+      };
+
+      const idxDisplayOrder = getColIdx(['display order']);
+      const idxFloorDisplay = getColIdx(['floor display', 'display floor', 'on floor']);
+      const idxBrand = getColIdx(['brand']);
+      const idxProductCode = getColIdx(['product code', 'prod code', 'code']);
+      const idxCategory = getColIdx(['category', 'cat']);
+      const idxDescHeadline = getColIdx(['description headline', 'headline']);
+      const idxDescBullets = getColIdx(['description bullets', 'bullets']);
+      const idxTechSpecs = getColIdx(['technical specs', 'specs', 'spec']);
+      const idxPrice = getColIdx(['price (₦)', 'price', 'naira price']);
+      const idxFrontImage = getColIdx(['front image']);
+      const idxSideImage = getColIdx(['side image']);
+      const idxBackImage = getColIdx(['back image']);
+      const idxTopImage = getColIdx(['top image']);
+      const idxVideo = getColIdx(['video (cloudinary)', 'video']);
+      const idxAssurance = getColIdx(['assurance text', 'assurance', 'footer']);
+      const idxStockStatus = getColIdx(['stock status', 'stock', 'status']);
+
+      const parsedProducts: Product[] = [];
+      const parsedPhotos: any[] = [];
+      const parsedVideos: any[] = [];
+      const parsedFloorCodes: string[] = [];
+
+      customRows.forEach((row, rowIndex) => {
+        const prodCode = idxProductCode !== -1 ? (row[idxProductCode] || '').trim() : `X-${1000 + rowIndex}`;
+        if (!prodCode) return;
+
+        const displayOrder = idxDisplayOrder !== -1 ? (row[idxDisplayOrder] || '').trim() : '';
+        const floorDisplay = idxFloorDisplay !== -1 ? (row[idxFloorDisplay] || '').trim().toLowerCase() : '';
+        const brand = idxBrand !== -1 ? (row[idxBrand] || '').trim() : 'HITECH';
+        const categoryPhrase = idxCategory !== -1 ? (row[idxCategory] || '').trim() : 'Accessories';
+        const descHeadline = idxDescHeadline !== -1 ? (row[idxDescHeadline] || '').trim() : '';
+        const descBullets = idxDescBullets !== -1 ? (row[idxDescBullets] || '').trim() : '';
+        const techSpecs = idxTechSpecs !== -1 ? (row[idxTechSpecs] || '').trim() : '';
+        const price = idxPrice !== -1 ? (row[idxPrice] || '').trim() : 'CALL';
+        const frontImage = idxFrontImage !== -1 ? (row[idxFrontImage] || '').trim() : '';
+        const video = idxVideo !== -1 ? (row[idxVideo] || '').trim() : '';
+        const assurance = idxAssurance !== -1 ? (row[idxAssurance] || '').trim() : (row[9] || '').trim();
+        const stockStatus = idxStockStatus !== -1 ? (row[idxStockStatus] || '').trim() : (row[17] || row[8] || 'In Stock').trim();
+
+        // Category mapping
+        const catStr = categoryPhrase.toLowerCase();
+        let catId = 'accessories';
+        if (catStr.includes('laptop')) catId = 'laptops';
+        else if (catStr.includes('printer')) catId = 'printers';
+        else if (catStr.includes('desktop') || catStr.includes('all-in-one') || catStr.includes('pc')) catId = 'desktops';
+        else if (catStr.includes('camera')) catId = 'cameras';
+        else if (catStr.includes('cctv') || catStr.includes('security')) catId = 'cctv';
+        else if (catStr.includes('network')) catId = 'networking';
+        else if (catStr.includes('monitor')) catId = 'monitors';
+        else if (catStr.includes('software')) catId = 'software';
+        else if (catStr.includes('phone') || catStr.includes('tablet')) catId = 'phones_tablets';
+        else if (catStr.includes('solar')) catId = 'solar_hub';
+
+        // Unique numeric ID based on code hash
+        let codeHash = 0;
+        for (let c = 0; c < prodCode.length; c++) {
+          codeHash += prodCode.charCodeAt(c);
+        }
+        const numericId = 100000 + (codeHash * 73) % 899999 + rowIndex;
+
+        const combinedSpecs = techSpecs || descBullets || "Certified original setup hardware system.";
+
+        const newProd: Product | any = {
+          id: numericId,
+          pn: prodCode,
+          cat: catId,
+          brand: brand,
+          n: `${brand} ${descHeadline || 'System'}`.trim(),
+          sp: combinedSpecs,
+          price: price.startsWith('₦') ? price : `₦${price}`,
+          desc: descBullets || descHeadline || 'Awaiting supervisor technical inspection clearance.',
+          imageUrl: frontImage || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300",
+          displayOrder: displayOrder,
+          assurance: assurance,
+          stockStatus: stockStatus,
+          bullets: descBullets
+        };
+        parsedProducts.push(newProd);
+
+        if (frontImage) {
+          parsedPhotos.push({
+            id: `sheet_front_${prodCode}`,
+            url: frontImage,
+            label: `${brand} ${descHeadline}`.trim() + " (Front View)",
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price.startsWith('₦') ? price : `₦${price}`,
+            isCustom: true
+          });
+        }
+        
+        const sideImage = idxSideImage !== -1 ? (row[idxSideImage] || '').trim() : '';
+        if (sideImage) {
+          parsedPhotos.push({
+            id: `sheet_side_${prodCode}`,
+            url: sideImage,
+            label: `${brand} (Side View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const backImage = idxBackImage !== -1 ? (row[idxBackImage] || '').trim() : '';
+        if (backImage) {
+          parsedPhotos.push({
+            id: `sheet_back_${prodCode}`,
+            url: backImage,
+            label: `${brand} (Back View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const topImage = idxTopImage !== -1 ? (row[idxTopImage] || '').trim() : '';
+        if (topImage) {
+          parsedPhotos.push({
+            id: `sheet_top_${prodCode}`,
+            url: topImage,
+            label: `${brand} (Top View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        if (video) {
+          parsedVideos.push({
+            id: `sheet_vid_${prodCode}`,
+            url: video,
+            title: `${brand} ${descHeadline} Walkthrough Video`.trim(),
+            desc: `Imported automated short demo clip. Code: ${prodCode}`
+          });
+        }
+
+        const isOnFloor = floorDisplay.startsWith('y') || floorDisplay === 'true' || floorDisplay === 'yes' || (displayOrder !== '' && floorDisplay !== 'no' && floorDisplay !== 'n');
+        if (isOnFloor) {
+          parsedFloorCodes.push(displayOrder || String(numericId));
+        }
+      });
+
+      if (parsedProducts.length === 0) {
+        if (!isSilent) alert("No valid product items could be parsed from the spreadsheet rows.");
+        return;
+      }
+
+      await handleUpdateProducts(parsedProducts);
+      
+      if (parsedFloorCodes.length > 0) {
+        const newLayout = parsedFloorCodes.join(', ');
+        const nextSaved = { ...displayFloorSavedConfigs, "Workbook Display": newLayout };
+        await handleSaveDisplayFloor(newLayout, nextSaved);
+      }
+      
+      if (parsedPhotos.length > 0) {
+        const customPhotos = galleryPhotos.filter(p => !String(p.id).startsWith('sheet_'));
+        await saveGalleryPhotosToStorage([...parsedPhotos, ...customPhotos]);
+      }
+      
+      if (parsedVideos.length > 0) {
+        setGalleryVideos(prev => {
+          const customVids = prev.filter(v => !String(v.id).startsWith('sheet_vid_'));
+          const joined = [...parsedVideos, ...customVids];
+          localStorage.setItem('ht_videos', JSON.stringify(joined));
+          return joined;
+        });
+      }
+
+      // Sync local spreadsheet states just in case
+      localStorage.setItem('ht_spreadsheet_headers', JSON.stringify(customHeaders));
+      localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(customRows));
+
+      const statusText = `✅ Workbook synchronized successfully! 📊 ${parsedProducts.length} items active standard live products.`;
+      setCsvUploadStatus(statusText);
+      localStorage.setItem('ht_csv_upload_status', statusText);
+      if (!isSilent) alert(statusText);
+    } catch (err: any) {
+      if (!isSilent) alert("Error synchronizing spreadsheet to database: " + err.message);
     }
   };
 
@@ -1709,87 +2119,15 @@ export default function App() {
     onView: () => void,
     badgeText?: string
   ) => {
-    const isDeal = !!prod.salePrice;
-    const isSolar = !!prod.watts || !!prod.volts || !!prod.maxLoadWatts;
-
-    const brandText = isDeal ? 'PROMO' : isSolar ? (prod.brand || 'CONFIG') : 'HITECH';
-    const catText = isDeal ? prod.badge : isSolar ? prod.type || 'SOLAR' : prod.cat;
-    const codeText = prod.pn || prod.modelId || prod.id;
-    
-    const titleText = isDeal ? prod.title : isSolar ? prod.spec || prod.n : prod.n;
-    const descText = prod.desc || '';
-    const specText = isDeal ? '' : prod.sp || '';
-    
-    const priceText = isDeal ? prod.salePrice : prod.price;
-
     return (
-      <div key={prod.id || codeText} className="bg-[rgba(255,255,255,0.05)] border border-white/10 rounded-lg p-[10px] flex flex-col w-full h-[420px] shrink-0 text-left">
-        
-        {/* Upper Area with Image and Dots */}
-        <div className="relative border border-[#212121] rounded bg-black flex flex-col justify-between h-[160px] shrink-0">
-          <div className="flex justify-center gap-2 pt-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#F5C518]"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
-          </div>
-          <div className="flex-1 flex justify-center items-center overflow-hidden p-2">
-              <img src={prod.imageUrl || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300"} alt={titleText} className="max-h-full object-contain" />
-          </div>
-        </div>
-
-        {/* Badges Gap 2px */}
-        <div className="flex items-center gap-[2px] mt-2 mb-[2px]">
-          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
-            {brandText}
-          </div>
-          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-300 uppercase truncate max-w-[80px]">
-            {catText}
-          </div>
-          <div className="bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-zinc-500 uppercase truncate flex-1">
-            CODE: {codeText}
-          </div>
-        </div>
-
-        <hr className="border-t border-[#333] my-[2px]"/>
-        <div className="text-[10px] text-zinc-400 font-sans leading-tight line-clamp-2 min-h-[28px] my-[2px]">
-          {descText}
-        </div>
-        <hr className="border-t border-[#333] my-[2px]"/>
-        <div className="text-[9px] text-zinc-300 font-mono leading-tight truncate my-[2px]">
-          {specText ? "• " + specText.split(', ').join(' • ') : "• Standard specifications • Certified"}
-        </div>
-        <hr className="border-t border-[#333] my-[2px]"/>
-        <div className="text-xs font-bold text-zinc-100 truncate my-[2px] flex items-center gap-1">
-          <span>⚙️</span>
-          <span className="truncate">{titleText}</span>
-        </div>
-        <hr className="border-t border-[#333] my-[2px]"/>
-        <div className="flex justify-between items-center my-[2px]">
-          <div className="text-sm font-black text-[#F5C518] font-mono">{priceText}</div>
-          <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-            In Stock
-          </div>
-        </div>
-        <hr className="border-t border-[#333] my-[2px]"/>
-        <div className="flex justify-between items-center my-[2px] text-[9px]">
-          <div className="font-bold text-red-500 flex items-center gap-1 uppercase truncate flex-1 mr-1">
-            🔥 {badgeText || (isDeal ? prod.badge || "PROMO" : "POPULAR MODEL")}
-          </div>
-          <div className="text-blue-400 cursor-pointer hover:underline shrink-0" onClick={(e) => { e.stopPropagation(); alert("4.8/5 Stars from recent showroom pickups."); }}>👥 See what others think</div>
-        </div>
-        <hr className="border-t border-[#333] my-[2px] mt-auto" />
-        <div className="flex gap-2 pt-1 mt-[2px]">
-          <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-600 rounded text-[10px] font-bold py-1.5 uppercase transition">
-            🛒 ADD TO ORDER
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onView(); }} className="flex-1 bg-[#F5C518]/10 hover:bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 rounded text-[10px] font-bold py-1.5 uppercase transition">
-            🔍 VIEW DETAILS
-          </button>
-        </div>
-
-      </div>
+      <CompactProductCard
+        key={prod.id || prod.pn || prod.modelId}
+        prod={prod}
+        onAdd={onAdd}
+        onView={onView}
+        badgeText={badgeText}
+        galleryPhotos={galleryPhotos}
+      />
     );
   };
 
@@ -1847,12 +2185,25 @@ export default function App() {
     setRepairsList(updatedRepairs);
     localStorage.setItem('ht_repairs', JSON.stringify(updatedRepairs));
     
+    // Delta deletion check
+    const currentIds = repairsList.map(r => r.id);
+    const nextIds = updatedRepairs.map(r => r.id);
+    const toDelete = currentIds.filter(id => !nextIds.includes(id));
+
+    for (const deleteId of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'repairs', deleteId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `repairs/${deleteId}`);
+      }
+    }
+
     // Sync each record individually
     for (const record of updatedRepairs) {
       try {
         await setDoc(doc(db, 'repairs', record.id), record);
       } catch (err) {
-        console.warn("Failed to sync repair ticket (operating in local fallback): ", err);
+        handleFirestoreError(err, OperationType.WRITE, `repairs/${record.id}`);
       }
     }
   };
@@ -1861,12 +2212,25 @@ export default function App() {
     setGmqList(updatedGmq);
     localStorage.setItem('ht_gmq', JSON.stringify(updatedGmq));
 
+    // Delta deletion check
+    const currentIds = gmqList.map(g => g.id);
+    const nextIds = updatedGmq.map(g => g.id);
+    const toDelete = currentIds.filter(id => !nextIds.includes(id));
+
+    for (const deleteId of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'gmq', deleteId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `gmq/${deleteId}`);
+      }
+    }
+
     // Sync each record individually
     for (const record of updatedGmq) {
       try {
         await setDoc(doc(db, 'gmq', record.id), record);
       } catch (err) {
-        console.warn("Failed to sync GM request (operating in local fallback): ", err);
+        handleFirestoreError(err, OperationType.WRITE, `gmq/${record.id}`);
       }
     }
   };
@@ -2665,6 +3029,54 @@ Message: ${quickMessageText}`;
     setReviewName('');
     setReviewText('');
     alert('Thank you! Your feedback star rating helps us improve services.');
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    try {
+      const nextReviews = reviewsList.filter(r => r.id !== id);
+      setReviewsList(nextReviews);
+      localStorage.setItem('ht_rev', JSON.stringify(nextReviews));
+      await deleteDoc(doc(db, 'reviews', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'reviews/' + id);
+    }
+  };
+
+  const handleDeleteEscalationTicket = async (ticketId: string) => {
+    if (window.confirm(`⚠️ Are you sure you want to permanently delete Escalation Ticket #${ticketId}?`)) {
+      try {
+        const nextList = escalationsList.filter(t => t.id !== ticketId);
+        setEscalationsList(nextList);
+        localStorage.setItem('ht_escalations', JSON.stringify(nextList));
+        await deleteDoc(doc(db, 'escalations', ticketId));
+        alert(`🗑️ Ticket #${ticketId} deleted successfully.`);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `escalations/${ticketId}`);
+      }
+    }
+  };
+
+  const handleDeleteManagerRequest = async (ticketId: string) => {
+    if (window.confirm(`⚠️ Are you sure you want to permanently delete Manager Ticket #${ticketId}?`)) {
+      try {
+        const nextList = managerRequestsList.filter(r => r.id !== ticketId);
+        setManagerRequestsList(nextList);
+        setMgrTrackedTicket(null);
+        localStorage.setItem('ht_manager_requests', JSON.stringify(nextList));
+        await deleteDoc(doc(db, 'manager_requests', ticketId));
+        alert(`🗑️ Manager Ticket #${ticketId} deleted successfully.`);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `manager_requests/${ticketId}`);
+      }
+    }
+  };
+
+  const handleDeleteDeal = (id: string) => {
+    if (window.confirm('⚠️ Are you sure you want to delete this promotional deal?')) {
+      const updated = dealsList.filter(d => d.id !== id);
+      setDealsList(updated);
+      localStorage.setItem('ht_deals', JSON.stringify(updated));
+    }
   };
 
   // Category view triggers
@@ -5151,25 +5563,85 @@ Message: ${quickMessageText}`;
 
                     {/* Inactive System Warnings display */}
                     {(() => {
+                      if (hideMissingLayoutWarnings) return null;
+                      
                       const activeParts = displayFloorActiveLayout.split(',').map(s => s.trim()).filter(Boolean);
                       const missingParts = activeParts.filter(partCode => {
                         const match = productsList.find(p => p.displayOrder === partCode || (!p.displayOrder && String(p.id) === partCode));
                         return !match;
                       });
+
                       if (missingParts.length > 0) {
                         return (
-                          <div className="bg-red-950/20 border border-red-900/40 p-2.5 rounded-lg text-[9px] text-red-300 font-mono space-y-1 animate-fade-in">
-                            <div className="flex items-center gap-1 font-bold uppercase text-red-400">
-                              <span>⚠️ NEEDS VERIFICATION: MISSING DATABASE RECORDS</span>
+                          <div className="bg-red-950/20 border border-red-900/40 p-3 rounded-lg text-[10px] text-red-300 font-mono space-y-2.5 animate-fade-in">
+                            <div className="flex items-center justify-between gap-2 border-b border-red-900/30 pb-1.5">
+                              <div className="flex items-center gap-1 font-bold uppercase text-red-400">
+                                <span>⚠️ Needs Verification: {missingParts.length} Missing Database Records</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setHideMissingLayoutWarnings(true)}
+                                className="text-zinc-500 hover:text-zinc-300 font-bold px-1.5 py-0.5 rounded hover:bg-white/5 text-[9px] transition-all uppercase"
+                                title="Dismiss and hide this warning box"
+                              >
+                                ✕ Dismiss Warning
+                              </button>
                             </div>
-                            <p className="leading-relaxed">
-                              The current layout lists layout numbers not currently verified or bound to active systems:
+                            
+                            <p className="leading-relaxed text-[9px] text-zinc-400">
+                              The current layout contains the following display numbers that are unbound to any system in your inventory. You can remove them or bind them:
                             </p>
-                            <ul className="list-disc pl-3 mt-1 space-y-0.5">
+                            
+                            <div className="flex flex-wrap gap-1.5">
                               {missingParts.map(code => (
-                                <li key={code}>Display Order Number "{code}" is currently unbound</li>
+                                <span key={code} className="bg-red-950/60 border border-red-900/40 px-2 py-0.5 rounded text-[9px] text-red-350 flex items-center gap-1 hover:border-red-800">
+                                  <span>#{code}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextParts = activeParts.filter(p => p !== code);
+                                      const nextLayout = nextParts.join(', ');
+                                      handleSaveDisplayFloor(nextLayout, displayFloorSavedConfigs);
+                                    }}
+                                    title={`Remove Display Code ${code}`}
+                                    className="text-red-400 hover:text-red-200 font-bold ml-1 hover:scale-125 transition-all text-[11px]"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
                               ))}
-                            </ul>
+                            </div>
+
+                            <div className="pt-2 border-t border-red-900/35 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextParts = activeParts.filter(p => !missingParts.includes(p));
+                                    const nextLayout = nextParts.join(', ');
+                                    handleSaveDisplayFloor(nextLayout, displayFloorSavedConfigs);
+                                    alert("Successfully removed all unbound layout numbers.");
+                                  }}
+                                  className="bg-red-900/40 hover:bg-red-900/60 text-red-200 border border-red-800/40 px-2 text-[9px] py-1 rounded font-bold uppercase tracking-wider transition-all"
+                                >
+                                  🧹 Remove All Unbound
+                                </button>
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCurrentRoom('spreadsheet_manager');
+                                  }}
+                                  className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 px-2 text-[9px] py-1 rounded font-bold uppercase tracking-wider transition-all"
+                                >
+                                  📊 Sync in Sheets
+                                </button>
+                              </div>
+
+                              <span className="text-[8px] text-zinc-500 italic">
+                                * To bind, set a product's "Display Order" to these numbers.
+                              </span>
+                            </div>
                           </div>
                         );
                       }
@@ -5815,9 +6287,15 @@ Message: ${quickMessageText}`;
                               )}
                               <button 
                                 onClick={() => handleTransferToGM(item)}
-                                className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded transition"
+                                className="px-2.5 py-1 bg-[#1a1111] hover:bg-zinc-900 text-red-400 border border-red-500/10 rounded transition"
                               >
                                 Escalate to GM
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteEscalationTicket(item.id)}
+                                className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-950 rounded transition"
+                              >
+                                Delete Ticket
                               </button>
                             </div>
                           </div>
@@ -5839,17 +6317,28 @@ Message: ${quickMessageText}`;
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
                   {dealsList.map(item => (
-                    renderCompactProductCard(
-                      {...item, badge: item.badge, desc: item.desc, n: item.title, pn: item.id},
-                      () => {
-                        const linkText = `Hello Sales! I am interested in claiming the posted promo deal: "${item.title}" on sale for ${item.salePrice}.`;
-                        openWhatsAppLink(contacts.sales, linkText);
-                      },
-                      () => {
-                        const linkText = `Hello Sales! I am interested in learning more about the promo deal: "${item.title}".`;
-                        openWhatsAppLink(contacts.sales, linkText);
-                      }
-                    )
+                    <div key={item.id} className="relative group flex flex-col">
+                      {renderCompactProductCard(
+                        {...item, badge: item.badge, desc: item.desc, n: item.title, pn: item.id},
+                        () => {
+                          const linkText = `Hello Sales! I am interested in claiming the posted promo deal: "${item.title}" on sale for ${item.salePrice}.`;
+                          openWhatsAppLink(contacts.sales, linkText);
+                        },
+                        () => {
+                          const linkText = `Hello Sales! I am interested in learning more about the promo deal: "${item.title}".`;
+                          openWhatsAppLink(contacts.sales, linkText);
+                        }
+                      )}
+                      {isStaffLoggedIn && (
+                        <button
+                          onClick={() => handleDeleteDeal(item.id)}
+                          className="absolute top-2 right-2 p-1.5 bg-red-950/80 hover:bg-red-900/90 text-red-400 hover:text-red-200 border border-red-500/30 rounded-lg shadow-lg transition duration-150 z-20 flex items-center justify-center cursor-pointer"
+                          title="Delete Promotional Deal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -6621,11 +7110,11 @@ Message: ${quickMessageText}`;
                                       />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                       <div>
                                         <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">Alter Status State</label>
                                         <select 
-                                          className="w-full bg-zinc-950 border border-zinc-900 rounded px-2 py-1 text-zinc-200"
+                                          className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-200"
                                           id={`gm-status-select-${mgrTrackedTicket.id}`}
                                           defaultValue={mgrTrackedTicket.status}
                                         >
@@ -6651,9 +7140,18 @@ Message: ${quickMessageText}`;
                                               noteEl.value
                                             );
                                           }}
-                                          className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold uppercase transition"
+                                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold uppercase transition"
                                         >
                                           💾 Save Board Changes
+                                        </button>
+                                      </div>
+                                      <div className="flex items-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteManagerRequest(mgrTrackedTicket.id)}
+                                          className="w-full py-2 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-950 rounded text-[10px] font-bold uppercase transition cursor-pointer"
+                                        >
+                                          🗑️ Delete Ticket
                                         </button>
                                       </div>
                                     </div>
@@ -6784,10 +7282,26 @@ Message: ${quickMessageText}`;
                 {/* Reviews feed */}
                 <div className="space-y-2.5 mt-4">
                   {reviewsList.map(item => (
-                    <div key={item.id} className="bg-[#141414] border border-[#262626] p-3 rounded-xl space-y-1.5">
+                    <div key={item.id} className="bg-[#141414] border border-[#262626] p-3 rounded-xl space-y-1.5 relative">
                       <div className="flex justify-between items-center text-[10px]">
                         <span className="font-bold text-zinc-300 font-sans uppercase">{item.name}</span>
-                        <span className="text-zinc-500">{item.timestamp}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-zinc-500">{item.timestamp}</span>
+                          {isStaffLoggedIn && (
+                            <button 
+                              onClick={() => {
+                                if (window.confirm("⚠️ Are you sure you want to permanently delete this customer review?")) {
+                                  handleDeleteReview(item.id);
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5 ml-1 font-mono uppercase text-[9px]"
+                              title="Delete Review"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                              <span>Delete</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, starIdx) => (
@@ -6843,6 +7357,474 @@ Message: ${quickMessageText}`;
               />
             )}
 
+            {/* ROOM 16: SPREADSHEET MANAGER */}
+            {currentRoom === 'spreadsheet_manager' && (
+              (() => {
+                const handleAddNewProductRow = () => {
+                  const nextCodeNumber = 1000 + spreadsheetRows.length;
+                  const newRow = [
+                    String(spreadsheetRows.length + 1), // Display Order
+                    "HP", // Brand
+                    `HP-PRO-${nextCodeNumber}`, // Product Code
+                    "Laptops", // Category
+                    "New Active Elite System", // Description Headline
+                    "Highly reliable enterprise-grade hardware with customized premium local support assurance.", // Description Bullets
+                    "Intel Core i5 • 16GB RAM • 512GB SSD • Windows 11 Pro", // Technical Specs
+                    "485000", // Price
+                    "In Stock", // Stock Status
+                    "Yes", // Floor Display (Yes/No)
+                    "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300", // Front Image
+                    "", // Side Image
+                    "", // Back Image
+                    "", // Top Image
+                    "", // Video
+                    "Added via Spreadsheet Manager", // Staff Notes
+                    "No" // Needs Verification
+                  ];
+                  const updated = [...spreadsheetRows, newRow];
+                  setSpreadsheetRows(updated);
+                  localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                  setCsvUploadStatus(`⚠️ Unsaved changes: 1 new row appended. Click "Save & Sync Live Store" below.`);
+                };
+
+                const handleDownloadCSVFile = () => {
+                  try {
+                    const csvRows = [spreadsheetHeaders, ...spreadsheetRows];
+                    const csvContent = csvRows.map(row => 
+                      row.map(cell => {
+                        const escaped = String(cell).replace(/"/g, '""');
+                        return `"${escaped}"`;
+                      }).join(",")
+                    ).join("\n");
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", "hitech_spreadsheet_export.csv");
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch (err: any) {
+                    alert("Error downloading CSV: " + err.message);
+                  }
+                };
+
+                const handleDownloadExcelFile = () => {
+                  try {
+                    const dataToExport = [spreadsheetHeaders, ...spreadsheetRows];
+                    const worksheet = XLSX.utils.aoa_to_sheet(dataToExport);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+                    XLSX.writeFile(workbook, "hitech_spreadsheet_export.xlsx");
+                  } catch (err: any) {
+                    alert("Error exporting Excel spreadsheet: " + err.message);
+                  }
+                };
+
+                return (
+                  <div className="p-4 space-y-4 text-left font-sans animate-fade-in text-zinc-100 pb-20">
+                    <div className="text-center mb-1">
+                      <h2 className="text-xs font-mono text-[#F5C518] uppercase tracking-[0.2em] font-extrabold flex items-center justify-center gap-1.5">
+                        <FileSpreadsheet className="w-4 h-4 text-[#F5C518]" />
+                        <span>Spreadsheet Manager</span>
+                      </h2>
+                      <p className="text-md font-serif font-bold text-zinc-200">Google Sheets & Excel Synced Controller</p>
+                      <p className="text-[10px] text-zinc-500 mt-1 uppercase max-w-sm mx-auto">
+                        Central database node representing the full uploaded products workbook.
+                      </p>
+                    </div>
+
+                    {/* Main upload card */}
+                    <div className="bg-zinc-950/80 border border-[#F5C518]/25 rounded-2xl p-4 space-y-4 shadow-lg">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase tracking-wider font-mono font-bold text-[#F5C518] block">📤 WORKBOOK UPLOADER ZONE</span>
+                          <p className="text-xs text-zinc-400">
+                            Select a CSV or Microsoft Excel spreadsheet file (`.xlsx`, `.xls`) to populate the live digital inventory. This immediately synchronizes the Showroom, Display Floor, and Hit Deals.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                          <button
+                            onClick={handleDownloadTemplate}
+                            className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-[#F5C518] px-4 py-2.5 rounded-xl text-xs font-mono font-black uppercase transition-all shadow active:scale-[0.98]"
+                          >
+                            📥 Download Standard Template
+                          </button>
+
+                          <button
+                            id="upload-google-sheet-btn"
+                            onClick={() => sheetFileInputRef.current?.click()}
+                            className="flex items-center gap-2 bg-[#F5C518] hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-mono font-black uppercase transition-all shadow active:scale-[0.98]"
+                          >
+                            <span>📤 Upload Google Sheet</span>
+                          </button>
+                          <input
+                            ref={sheetFileInputRef}
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                await handleUploadCSV(file);
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Status / Live Counters */}
+                      <div className="p-3 bg-[#111] border border-zinc-900 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+                        <div className="font-mono text-zinc-400 space-y-1">
+                          <div>Status: <span className="font-bold text-emerald-400">{csvUploadStatus || 'Ready to Sync'}</span></div>
+                          <div>Total Records: <span className="text-white font-bold">{spreadsheetRows.length} rows loaded</span></div>
+                        </div>
+                        {spreadsheetRows.length > 0 && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm("Are you sure you want to revert to factory defaults and clear the current sheet sync?")) {
+                                handleFactoryResetDatabase();
+                              }
+                            }}
+                            className="text-red-500 hover:text-red-400 font-mono font-bold uppercase text-[10px]"
+                          >
+                            ⚠️ Clear Loaded Data
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Searching / Filtering & Interactive Controls */}
+                    <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 space-y-4">
+                      <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                        <div className="relative w-full md:w-80">
+                          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                          <input
+                            type="text"
+                            placeholder="Search full spreadsheet data..."
+                            value={sheetSearchString}
+                            onChange={(e) => setSheetSearchString(e.target.value)}
+                            className="w-full bg-black border border-zinc-900 rounded-xl py-2 pl-9 pr-4 text-xs text-zinc-100 placeholder-zinc-600 focus:border-[#F5C518] outline-none font-sans"
+                          />
+                        </div>
+
+                        {/* Interactive Spreadsheet Operations */}
+                        <div className="flex flex-wrap items-center gap-2 bg-zinc-900/60 p-1.5 border border-zinc-850 rounded-xl">
+                          <button
+                            onClick={handleAddNewProductRow}
+                            className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
+                            title="Insert a pre-formatted empty product row at the bottom"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add New Row
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Are you ready to sync these ${spreadsheetRows.length} records back into the live Firestore database? This modifies listings on showroom, display floor, and video galleries.`)) {
+                                handleSyncSpreadsheetToDatabase(spreadsheetHeaders, spreadsheetRows);
+                              }
+                            }}
+                            className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-450 text-neutral-950 px-3 py-1.5 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all"
+                            title="Apply and sync spreadsheet content back to Google Cloud Firestore database"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Save & Sync Live Store
+                          </button>
+
+                          <button
+                            onClick={handleDownloadExcelFile}
+                            className="flex items-center gap-1 bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
+                            title="Download modified spreadsheet workbook as a Microsoft Excel `.xlsx` file"
+                          >
+                            📥 Export Excel (.xlsx)
+                          </button>
+
+                          <button
+                            onClick={handleDownloadCSVFile}
+                            className="flex items-center gap-1 bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
+                            title="Export spreadsheet as standard CSV file"
+                          >
+                            📥 Export CSV (.csv)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* MINI SPREADSHEET HIGH DENSITY GRID */}
+                      <div className="border border-zinc-900 rounded-xl overflow-hidden shadow-lg bg-black">
+                        <div className="overflow-x-auto max-h-[500px]">
+                          <table className="w-full min-w-[1400px] text-[11px] font-sans border-collapse">
+                            <thead>
+                              <tr className="bg-zinc-950 text-zinc-400 uppercase font-mono border-b border-zinc-900 text-left sticky top-0 z-10">
+                                <th className="p-3 font-extrabold tracking-wider border-r border-zinc-900 text-center w-14 bg-zinc-950">Row</th>
+                                <th className="p-3 font-extrabold tracking-wider border-r border-zinc-900 text-center w-24 bg-zinc-950">Actions</th>
+                                {spreadsheetHeaders.map((header, hIdx) => (
+                                  <th key={hIdx} className="p-3 font-extrabold tracking-wider border-r border-zinc-900 min-w-[130px] bg-zinc-950">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-900">
+                              {(() => {
+                                const filtered = spreadsheetRows.map((row, index) => ({ row, absoluteIdx: index }))
+                                  .filter(({ row }) => {
+                                    if (!sheetSearchString.trim()) return true;
+                                    const query = sheetSearchString.toLowerCase();
+                                    return row.some(cell => String(cell).toLowerCase().includes(query));
+                                  });
+
+                                if (filtered.length === 0) {
+                                  return (
+                                    <tr>
+                                      <td colSpan={spreadsheetHeaders.length + 2} className="py-12 text-center font-mono text-zinc-650 text-xs">
+                                        No records match your search criteria.
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
+                                return filtered.map(({ row, absoluteIdx }, fIdx) => (
+                                  <tr key={absoluteIdx} className="hover:bg-zinc-900/60 transition even:bg-zinc-950/20">
+                                    {/* Column 1: Row Number indicator */}
+                                    <td className="p-2.5 text-center font-mono font-bold text-zinc-500 border-r border-[#1a1a1a] bg-zinc-950/40 select-none">
+                                      {absoluteIdx + 1}
+                                    </td>
+
+                                    {/* Column 2: Live Row Actions */}
+                                    <td className="p-2 border-r border-[#1a1a1a] bg-zinc-950/20 text-center">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <button
+                                          onClick={() => {
+                                            setActiveEditRowIdx(absoluteIdx);
+                                            setDraftRowValues([...row]);
+                                          }}
+                                          className="p-1 hover:bg-[#F5C518]/10 rounded text-[#F5C518] hover:text-amber-400 font-bold transition flex items-center justify-center"
+                                          title="Edit Full Row Columns Form"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            if (window.confirm(`Are you sure you want to delete Product Code "${row[2] || 'this item'}"? (Make sure to click "Save & Sync Live Store" when done)`)) {
+                                              const updated = spreadsheetRows.filter((_, idx) => idx !== absoluteIdx);
+                                              setSpreadsheetRows(updated);
+                                              localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                              setCsvUploadStatus(`⚠️ Unsaved changes: deleted row #${absoluteIdx + 1}. Click "Save & Sync Live Store".`);
+                                            }
+                                          }}
+                                          className="p-1 hover:bg-red-500/10 rounded text-red-500 hover:text-red-400 font-bold transition flex items-center justify-center"
+                                          title="Delete Product Row"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+
+                                    {row.map((cell, cIdx) => {
+                                      const isUrl = cell?.startsWith('http://') || cell?.startsWith('https://');
+                                      return (
+                                        <td
+                                          key={cIdx} 
+                                          className="p-2.5 text-zinc-300 font-sans border-r border-[#1a1a1a] max-w-[200px] truncate cursor-pointer hover:bg-zinc-800/45 transition"
+                                          title="Double-click to edit cell"
+                                          onDoubleClick={() => {
+                                            setEditingCell({
+                                              rIdx: absoluteIdx,
+                                              cIdx,
+                                              value: cell
+                                            });
+                                          }}
+                                        >
+                                          {editingCell && editingCell.rIdx === absoluteIdx && editingCell.cIdx === cIdx ? (
+                                            <input
+                                              type="text"
+                                              value={editingCell.value}
+                                              onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                                              onBlur={() => {
+                                                const updated = [...spreadsheetRows];
+                                                updated[editingCell.rIdx][editingCell.cIdx] = editingCell.value;
+                                                setSpreadsheetRows(updated);
+                                                localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                                setEditingCell(null);
+                                                setCsvUploadStatus(`⚠️ Unsaved changes: edited cell at Row ${editingCell.rIdx + 1}. Click "Save & Sync Live Store"`);
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  const updated = [...spreadsheetRows];
+                                                  updated[editingCell.rIdx][editingCell.cIdx] = editingCell.value;
+                                                  setSpreadsheetRows(updated);
+                                                  localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                                  setEditingCell(null);
+                                                  setCsvUploadStatus(`⚠️ Unsaved changes: edited cell at Row ${editingCell.rIdx + 1}. Click "Save & Sync Live Store"`);
+                                                } else if (e.key === 'Escape') {
+                                                  setEditingCell(null);
+                                                }
+                                              }}
+                                              className="bg-zinc-900 text-white font-sans text-[11px] px-1 py-0.5 border border-[#F5C518] outline-none rounded w-full"
+                                              autoFocus
+                                            />
+                                          ) : isUrl ? (
+                                            <a href={cell} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                              <span>Link</span>
+                                              <ExternalLink className="w-2.5 h-2.5" />
+                                            </a>
+                                          ) : cell || '-'}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ));
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-[10px] font-mono text-zinc-500 mt-1 gap-2.5">
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-2 h-2 rounded-full bg-[#F5C518]"></span>
+                          Double-click cell to edit directly in-place.
+                        </span>
+                        <span>Scroll horizontally to view columns A to R. Large image links or Cloudinary links are safely truncated.</span>
+                      </div>
+                    </div>
+
+                    {/* SPREADSHEET ROW COMPILATION DIALOG FORM */}
+                    {activeEditRowIdx !== null && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+                        <div className="bg-zinc-950 border border-[#F5C518]/30 max-w-2xl w-full rounded-2xl overflow-hidden shadow-2xl flex flex-col my-8 max-h-[90vh]">
+                          <div className="p-4 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileSpreadsheet className="w-5 h-5 text-[#F5C518]" />
+                              <div>
+                                <h3 className="text-sm font-sans font-extrabold text-zinc-100">Edit Row #{activeEditRowIdx + 1} Fields</h3>
+                                <p className="text-[10px] font-mono text-zinc-400">Modify spreadsheet data structures interactively</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => { setActiveEditRowIdx(null); setDraftRowValues(null); }}
+                              className="text-zinc-500 hover:text-white px-2 py-1 text-xs"
+                              type="button"
+                            >
+                              ✕ Close
+                            </button>
+                          </div>
+
+                          <div className="p-5 overflow-y-auto space-y-4 text-xs font-sans">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {spreadsheetHeaders.map((header, hIdx) => {
+                                const currentVal = draftRowValues ? draftRowValues[hIdx] : (spreadsheetRows[activeEditRowIdx]?.[hIdx] || '');
+                                return (
+                                  <div key={hIdx} className="space-y-1">
+                                    <label className="block text-[10px] uppercase font-mono font-bold text-[#F5C518] tracking-wider">
+                                      {header}
+                                    </label>
+                                    {header.toLowerCase().includes('category') ? (
+                                      <select
+                                        value={currentVal}
+                                        onChange={(e) => {
+                                          const nextDraft = draftRowValues ? [...draftRowValues] : [...spreadsheetRows[activeEditRowIdx]];
+                                          nextDraft[hIdx] = e.target.value;
+                                          setDraftRowValues(nextDraft);
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:border-[#F5C518] outline-none"
+                                      >
+                                        <option value="Laptops">Laptops</option>
+                                        <option value="Printers">Printers</option>
+                                        <option value="Desktops">Desktops</option>
+                                        <option value="Cameras">Cameras</option>
+                                        <option value="CCTV Security">CCTV Security</option>
+                                        <option value="Networking">Networking</option>
+                                        <option value="Monitors">Monitors</option>
+                                        <option value="Software">Software</option>
+                                        <option value="Phones & Tablets">Phones & Tablets</option>
+                                        <option value="Solar Hub">Solar Hub</option>
+                                        <option value="Accessories">Accessories</option>
+                                      </select>
+                                    ) : header.toLowerCase().includes('stock status') ? (
+                                      <select
+                                        value={currentVal}
+                                        onChange={(e) => {
+                                          const nextDraft = draftRowValues ? [...draftRowValues] : [...spreadsheetRows[activeEditRowIdx]];
+                                          nextDraft[hIdx] = e.target.value;
+                                          setDraftRowValues(nextDraft);
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:border-[#F5C518] outline-none"
+                                      >
+                                        <option value="In Stock">In Stock</option>
+                                        <option value="Low Stock">Low Stock</option>
+                                        <option value="Out of Stock">Out of Stock</option>
+                                        <option value="Pre-Order">Pre-Order</option>
+                                      </select>
+                                    ) : header.toLowerCase().includes('display (yes/no)') || header.toLowerCase().includes('verified') ? (
+                                      <select
+                                        value={currentVal}
+                                        onChange={(e) => {
+                                          const nextDraft = draftRowValues ? [...draftRowValues] : [...spreadsheetRows[activeEditRowIdx]];
+                                          nextDraft[hIdx] = e.target.value;
+                                          setDraftRowValues(nextDraft);
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:border-[#F5C518] outline-none"
+                                      >
+                                        <option value="Yes">Yes</option>
+                                        <option value="No">No</option>
+                                      </select>
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={currentVal}
+                                        onChange={(e) => {
+                                          const nextDraft = draftRowValues ? [...draftRowValues] : [...spreadsheetRows[activeEditRowIdx]];
+                                          nextDraft[hIdx] = e.target.value;
+                                          setDraftRowValues(nextDraft);
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-700 focus:border-[#F5C518] outline-none font-sans"
+                                      />
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="p-4 bg-zinc-900 border-t border-zinc-800 flex items-center justify-end gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => { setActiveEditRowIdx(null); setDraftRowValues(null); }}
+                              className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 border border-zinc-700 px-4 py-2 rounded-xl text-xs font-mono font-extrabold uppercase tracking-wider transition-all"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeEditRowIdx !== null) {
+                                  const updated = [...spreadsheetRows];
+                                  const finalRow = draftRowValues ? draftRowValues : [...spreadsheetRows[activeEditRowIdx]];
+                                  updated[activeEditRowIdx] = finalRow;
+                                  setSpreadsheetRows(updated);
+                                  localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                  setActiveEditRowIdx(null);
+                                  setDraftRowValues(null);
+                                  setCsvUploadStatus(`⚠️ Unsaved changes: Row #${activeEditRowIdx + 1} updated. Click "Save & Sync Live Store" below.`);
+                                }
+                              }}
+                              className="bg-[#F5C518] hover:bg-amber-400 text-black px-5 py-2 rounded-xl text-xs font-mono font-black uppercase tracking-wider transition-all"
+                            >
+                              Apply Changes
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })()
+            )}
+
           </div>
 
           {/* FIXED BOTTOM NAVIGATION BAR BAR */}
@@ -6851,6 +7833,7 @@ Message: ${quickMessageText}`;
               { id: 'gallery', label: 'Gallery', icon: <Image className="w-4 h-4" /> },
               { id: 'videogallery', label: 'Videos', icon: <Video className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'displayfloor', label: 'Display Floor', icon: <LayoutGrid className="w-4 h-4 text-[#F5C518]" /> },
+              { id: 'spreadsheet_manager', label: 'Sheets Mgr', icon: <FileSpreadsheet className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'showroom', label: 'Showroom', icon: <ShoppingBag className="w-4 h-4 text-[#F5C518]" /> },
               { id: 'solar', label: 'Solar Estimator', icon: <Sun className="w-4 h-4 text-amber-400" /> },
               { id: 'invoice', label: 'Orders', icon: <FileText className="w-4 h-4" />, countBadge: totalItemsCount },

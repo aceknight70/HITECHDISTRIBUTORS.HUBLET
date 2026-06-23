@@ -92,7 +92,7 @@ export default function ProductDetailOverlay({
 }: ProductDetailOverlayProps) {
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeView, setActiveView] = useState<'Front' | 'Side' | 'Back' | 'Top'>('Front');
+  const [activeView, setActiveView] = useState<'Manual' | 'Front' | 'Side' | 'Back' | 'Top'>('Manual');
 
   useEffect(() => {
     if (!product) {
@@ -161,6 +161,7 @@ export default function ProductDetailOverlay({
       case 'Top':
         return { transform: 'perspective(600px) rotateX(42deg) rotateZ(8deg) scale(0.9)' };
       case 'Front':
+      case 'Manual':
       default:
         return { transform: 'none' };
     }
@@ -221,7 +222,7 @@ export default function ProductDetailOverlay({
           {/* Top-Right Multi-View Selector labels & dots */}
           <div className="absolute top-3.5 right-3.5 text-right z-10">
             <div className="flex gap-2 justify-end font-mono text-[8px] font-extrabold uppercase tracking-widest text-zinc-500">
-              {(['Front', 'Side', 'Back', 'Top'] as const).map(view => (
+              {(['Manual', 'Front', 'Side', 'Back', 'Top'] as const).map(view => (
                 <span 
                   key={view} 
                   onClick={() => setActiveView(view)}
@@ -233,7 +234,7 @@ export default function ProductDetailOverlay({
             </div>
             
             <div className="flex gap-2.5 justify-end font-mono text-[9px] items-center mt-1 pr-0.5 leading-none">
-              {(['Front', 'Side', 'Back', 'Top'] as const).map(view => (
+              {(['Manual', 'Front', 'Side', 'Back', 'Top'] as const).map(view => (
                 <span 
                   key={view}
                   onClick={() => setActiveView(view)} 
