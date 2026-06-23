@@ -1076,14 +1076,16 @@ export default function App() {
     setGalleryPhotos(formatted);
     localStorage.setItem('ht_gallery_photos', JSON.stringify(formatted));
     
-    // Save each photo to Firestore
-    for (const photo of formatted) {
-      try {
-        await setDoc(doc(db, 'gallery', String(photo.id)), photo);
-      } catch (err) {
-        console.warn("Gallery cloud sync notice (operating in local fallback): ", err);
-      }
-    }
+    // Save each photo to Firestore in background & parallel to avoid blocking UI thread
+    Promise.resolve().then(async () => {
+      await Promise.all(
+        formatted.map(photo =>
+          setDoc(doc(db, 'gallery', String(photo.id)), photo).catch(err => {
+            console.warn("Gallery cloud sync notice (operating in local fallback): ", err);
+          })
+        )
+      );
+    });
   };
 
   const [csvUploadStatus, setCsvUploadStatus] = useState<string>(() => {
@@ -1171,9 +1173,21 @@ export default function App() {
       let allRows: string[][] = [];
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
+      // Read file standardly using browser FileReader API
+      const fileResult = await new Promise<any>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result);
+        reader.onerror = (e) => reject(new Error("Unable to read the CSV/Excel file stream."));
+        
+        if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+          reader.readAsArrayBuffer(file);
+        } else {
+          reader.readAsText(file, 'utf-8');
+        }
+      });
+
       if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(fileResult, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
@@ -1181,8 +1195,7 @@ export default function App() {
           (row || []).map(cell => cell !== null && cell !== undefined ? String(cell) : "")
         );
       } else {
-        const text = await file.text();
-        allRows = parseCSVBytes(text);
+        allRows = parseCSVBytes(fileResult);
       }
 
       if (allRows.length < 2) {
@@ -2176,21 +2189,23 @@ export default function App() {
     const nextIds = updatedProds.map(p => String(p.id));
     const toDelete = currentIds.filter(id => !nextIds.includes(id));
 
-    for (const deleteId of toDelete) {
-      try {
-        await deleteDoc(doc(db, 'products', deleteId));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `products/${deleteId}`);
-      }
-    }
+    Promise.resolve().then(async () => {
+      await Promise.all(
+        toDelete.map(deleteId =>
+          deleteDoc(doc(db, 'products', deleteId)).catch(err => {
+            handleFirestoreError(err, OperationType.DELETE, `products/${deleteId}`);
+          })
+        )
+      );
 
-    for (const prod of updatedProds) {
-      try {
-        await setDoc(doc(db, 'products', String(prod.id)), prod);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `products/${prod.id}`);
-      }
-    }
+      await Promise.all(
+        updatedProds.map(prod =>
+          setDoc(doc(db, 'products', String(prod.id)), prod).catch(err => {
+            handleFirestoreError(err, OperationType.WRITE, `products/${prod.id}`);
+          })
+        )
+      );
+    });
   };
 
   const handleUpdateSolarProducts = async (updatedSolars: SolarProduct[]) => {
@@ -2201,21 +2216,23 @@ export default function App() {
     const nextIds = updatedSolars.map(s => s.id);
     const toDelete = currentIds.filter(id => !nextIds.includes(id));
 
-    for (const deleteId of toDelete) {
-      try {
-        await deleteDoc(doc(db, 'solar_products', deleteId));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `solar_products/${deleteId}`);
-      }
-    }
+    Promise.resolve().then(async () => {
+      await Promise.all(
+        toDelete.map(deleteId =>
+          deleteDoc(doc(db, 'solar_products', deleteId)).catch(err => {
+            handleFirestoreError(err, OperationType.DELETE, `solar_products/${deleteId}`);
+          })
+        )
+      );
 
-    for (const solar of updatedSolars) {
-      try {
-        await setDoc(doc(db, 'solar_products', solar.id), solar);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `solar_products/${solar.id}`);
-      }
-    }
+      await Promise.all(
+        updatedSolars.map(solar =>
+          setDoc(doc(db, 'solar_products', solar.id), solar).catch(err => {
+            handleFirestoreError(err, OperationType.WRITE, `solar_products/${solar.id}`);
+          })
+        )
+      );
+    });
   };
 
   const handleUpdateRepairs = async (updatedRepairs: RepairRecord[]) => {
