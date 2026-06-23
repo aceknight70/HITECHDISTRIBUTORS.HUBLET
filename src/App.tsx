@@ -1088,6 +1088,21 @@ export default function App() {
     return localStorage.getItem('ht_csv_upload_status') || 'No Google Sheets CSV imported yet';
   });
 
+  const [csvUploadNotification, setCsvUploadNotification] = useState<{
+    status: 'success' | 'error';
+    count?: number;
+    timestamp?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (csvUploadNotification) {
+      const timer = setTimeout(() => {
+        setCsvUploadNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [csvUploadNotification]);
+
   const parseCSVBytes = (text: string) => {
     const lines: string[][] = [];
     let row: string[] = [];
@@ -1362,8 +1377,28 @@ export default function App() {
         localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(allRows.slice(1)));
       }
 
+      const day = new Date().getDate();
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const month = months[new Date().getMonth()];
+      const year = new Date().getFullYear();
+      let hours = new Date().getHours();
+      const minutes = String(new Date().getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const formattedTimestamp = `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
+
+      setCsvUploadNotification({
+        status: 'success',
+        count: parsedProducts.length,
+        timestamp: formattedTimestamp
+      });
+
       alert(statusText);
     } catch (err: any) {
+      setCsvUploadNotification({
+        status: 'error'
+      });
       alert("Error parsing and uploading sheets data: " + err.message);
     }
   };
@@ -7475,6 +7510,55 @@ Message: ${quickMessageText}`;
                           />
                         </div>
                       </div>
+
+                      {csvUploadNotification && (
+                        <div className={`p-4 border rounded-xl transition-all duration-500 ${
+                          csvUploadNotification.status === 'success' 
+                            ? 'bg-emerald-950/30 border-emerald-500/20 text-emerald-200' 
+                            : 'bg-red-950/30 border-red-500/20 text-red-200'
+                        } font-sans text-xs space-y-2 animate-fade-in`}>
+                          {csvUploadNotification.status === 'success' ? (
+                            <>
+                              <div className="flex items-center gap-2 font-mono font-extrabold uppercase text-[#F5C518]">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                                <span>✅ Upload Successful!</span>
+                              </div>
+                              <div className="pl-1 space-y-1 text-zinc-300 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span>📊</span>
+                                  <span><strong className="text-white">{csvUploadNotification.count}</strong> records loaded successfully.</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span>🏪</span>
+                                  <span>Display Floor updated.</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span>🛒</span>
+                                  <span>Showroom updated.</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span>🖼️</span>
+                                  <span>Gallery updated.</span>
+                                </div>
+                                <div className="text-[10px] text-zinc-500 pt-1 font-mono flex items-center gap-1.5">
+                                  <span>📅</span>
+                                  <span>Uploaded at: {csvUploadNotification.timestamp}</span>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2 font-mono font-extrabold uppercase text-red-400">
+                                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0"></span>
+                                <span>❌ Upload Failed</span>
+                              </div>
+                              <div className="pl-1 text-zinc-300 text-xs">
+                                Please check your file format and try again.
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       {/* Status / Live Counters */}
                       <div className="p-3 bg-[#111] border border-zinc-900 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
