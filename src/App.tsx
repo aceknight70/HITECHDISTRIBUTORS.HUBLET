@@ -902,6 +902,8 @@ export default function App() {
   const [activeManagerTab, setActiveManagerTab] = useState<'sales' | 'inventory' | 'gm'>('sales');
 
   const [sheetSearchString, setSheetSearchString] = useState<string>('');
+  const [showSpecifyRows, setShowSpecifyRows] = useState<boolean>(false);
+  const [specifyRowsInput, setSpecifyRowsInput] = useState<string>('');
 
   const [spreadsheetHeaders, setSpreadsheetHeaders] = useState<string[]>(() => {
     try {
@@ -7395,6 +7397,84 @@ Message: ${quickMessageText}`;
             {/* ROOM 16: SPREADSHEET MANAGER */}
             {currentRoom === 'spreadsheet_manager' && (
               (() => {
+                const parsedNumbers: number[] = [];
+                const invalidNumbers: number[] = [];
+                const validDisplayCodes: string[] = [];
+
+                if (specifyRowsInput.trim()) {
+                  const parts = specifyRowsInput.split(',').map(s => s.trim()).filter(Boolean);
+                  for (const part of parts) {
+                    if (part.includes('-')) {
+                      const rangeParts = part.split('-');
+                      if (rangeParts.length === 2) {
+                        const start = parseInt(rangeParts[0].trim(), 10);
+                        const end = parseInt(rangeParts[1].trim(), 10);
+                        if (!isNaN(start) && !isNaN(end)) {
+                          const lower = Math.min(start, end);
+                          const upper = Math.max(start, end);
+                          for (let i = lower; i <= upper; i++) {
+                            if (!parsedNumbers.includes(i)) {
+                              parsedNumbers.push(i);
+                            }
+                          }
+                        }
+                      }
+                    } else {
+                      const num = parseInt(part, 10);
+                      if (!isNaN(num)) {
+                        if (!parsedNumbers.includes(num)) {
+                          parsedNumbers.push(num);
+                        }
+                      }
+                    }
+                  }
+
+                  // Validate existence
+                  const headersLower = spreadsheetHeaders.map(h => h.trim().toLowerCase());
+                  const idxDisplayOrder = headersLower.findIndex(h => ['display order', 'display_order', 'displayorder'].some(alias => h === alias || h.includes(alias)));
+
+                  parsedNumbers.forEach(num => {
+                    let found = false;
+                    let foundCode = '';
+                    
+                    for (let index = 0; index < spreadsheetRows.length; index++) {
+                      const row = spreadsheetRows[index];
+                      const isRowIdxMatch = (index + 1 === num);
+                      const displayVal = idxDisplayOrder !== -1 ? parseInt(row[idxDisplayOrder], 10) : NaN;
+                      const isDisplayOrderMatch = (!isNaN(displayVal) && displayVal === num);
+                      
+                      if (isRowIdxMatch || isDisplayOrderMatch) {
+                        found = true;
+                        let code = idxDisplayOrder !== -1 ? row[idxDisplayOrder]?.trim() : '';
+                        if (!code) {
+                          code = row[2]?.trim() || String(index + 1);
+                        }
+                        foundCode = code;
+                        break;
+                      }
+                    }
+
+                    if (found) {
+                      if (!validDisplayCodes.includes(foundCode)) {
+                        validDisplayCodes.push(foundCode);
+                      }
+                    } else {
+                      invalidNumbers.push(num);
+                    }
+                  });
+                }
+
+                const handleSaveRowsSelection = () => {
+                  if (validDisplayCodes.length === 0 && specifyRowsInput.trim() !== '') {
+                    alert("No valid rows were resolved to add to the Display Floor.");
+                    return;
+                  }
+                  
+                  const newLayout = validDisplayCodes.join(', ');
+                  handleSaveDisplayFloor(newLayout, displayFloorSavedConfigs);
+                  alert(`✅ Saved successfully! Display Floor active layout has been configured with ${validDisplayCodes.length} products: ${newLayout}`);
+                };
+
                 const handleAddNewProductRow = () => {
                   const nextCodeNumber = 1000 + spreadsheetRows.length;
                   const newRow = [
@@ -7508,8 +7588,96 @@ Message: ${quickMessageText}`;
                               }
                             }}
                           />
+
+                          <button
+                            id="specify-rows-toggle-btn"
+                            onClick={() => {
+                              if (!showSpecifyRows && !specifyRowsInput) {
+                                setSpecifyRowsInput(displayFloorActiveLayout);
+                              }
+                              setShowSpecifyRows(prev => !prev);
+                            }}
+                            className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-[#F5C518] px-4 py-2.5 rounded-xl text-xs font-mono font-black uppercase transition-all shadow active:scale-[0.98]"
+                            title="Specify custom rows or ranges to be pushed to the Display Floor"
+                          >
+                            <span>📋 SPECIFY ROWS TO ADD</span>
+                          </button>
                         </div>
                       </div>
+
+                      {showSpecifyRows && (
+                        <div id="specify-rows-panel" className="bg-[#0b0c10] border border-[#F5C518]/30 rounded-xl p-4 space-y-3.5 animate-fade-in font-sans">
+                          <div className="flex items-center gap-2 text-xs font-mono text-[#F5C518] font-bold uppercase tracking-wider">
+                            <span>🛠️ Specify Display Floor Active Rows</span>
+                          </div>
+                          
+                          <p className="text-xs text-zinc-400">
+                            Enter the specific row numbers to display on the physical Floor. You can type individual numbers (e.g. <code className="text-[#F5C518] font-mono">1, 2, 3</code>), ranges (e.g. <code className="text-[#F5C518] font-mono">131-155</code>), or a mixed combination (e.g. <code className="text-[#F5C518] font-mono">1-10, 20-30, 50, 65-70</code>).
+                          </p>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono text-zinc-300 block font-bold">Enter rows to display on the floor:</label>
+                            <input
+                              id="specify-rows-text-input"
+                              type="text"
+                              className="w-full bg-black border border-zinc-850 rounded-xl p-3 font-mono text-xs text-zinc-100 placeholder-zinc-700 focus:border-[#F5C518] outline-none transition-all"
+                              value={specifyRowsInput}
+                              onChange={(e) => setSpecifyRowsInput(e.target.value)}
+                              placeholder="e.g. 1-10, 20-30, 50, 65-70"
+                            />
+                          </div>
+
+                          {/* Live Validation & Status */}
+                          {specifyRowsInput.trim() ? (
+                            <div className="p-3 bg-black/60 border border-zinc-900 rounded-lg text-xs space-y-2">
+                              {validDisplayCodes.length > 0 ? (
+                                <div className="text-emerald-400 font-bold flex items-center gap-1.5 font-sans">
+                                  <span>✅</span>
+                                  <span>
+                                    <strong>{validDisplayCodes.length}</strong> rows will be added to Display Floor
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="text-zinc-500 font-sans italic">
+                                  No valid rows currently identified in your input format.
+                                </div>
+                              )}
+                              
+                              {invalidNumbers.length > 0 && (
+                                <div className="space-y-1">
+                                  {invalidNumbers.map(invalidNum => (
+                                    <div key={invalidNum} className="text-amber-400 flex items-center gap-1.5 font-sans">
+                                      <span>⚠️</span>
+                                      <span>Row <strong className="font-mono">{invalidNum}</strong> not found in data</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              id="save-specified-rows-btn"
+                              onClick={handleSaveRowsSelection}
+                              className="flex items-center gap-1.5 bg-[#F5C518] hover:bg-amber-400 text-black px-4 py-2 rounded-lg text-xs font-mono font-black uppercase transition-all shadow active:scale-[0.98]"
+                            >
+                              <span>💾 SAVE ROWS</span>
+                            </button>
+                            
+                            <button
+                              id="cancel-specify-rows-btn"
+                              onClick={() => {
+                                setSpecifyRowsInput('');
+                                setShowSpecifyRows(false);
+                              }}
+                              className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-750 text-zinc-300 px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-all shadow active:scale-[0.98]"
+                            >
+                              <span>❌ CANCEL</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {csvUploadNotification && (
                         <div className={`p-4 border rounded-xl transition-all duration-500 ${
