@@ -899,6 +899,21 @@ export default function App() {
     localStorage.setItem('ht_spreadsheet_id', id);
   };
 
+  const [hostedCsvUrl, setHostedCsvUrl] = useState<string>(() => {
+    return localStorage.getItem('ht_hosted_csv_url') || '';
+  });
+  const [hostedCsvSyncStatus, setHostedCsvSyncStatus] = useState<string>('');
+
+  const handleUpdateHostedCsvUrl = async (url: string) => {
+    setHostedCsvUrl(url);
+    localStorage.setItem('ht_hosted_csv_url', url);
+    try {
+      await setDoc(doc(db, 'app_config', 'hosted_csv'), { url });
+    } catch (err) {
+      console.warn("Hosted CSV URL cloud update offline fallback: ", err);
+    }
+  };
+
   const [activeManagerTab, setActiveManagerTab] = useState<'sales' | 'inventory' | 'gm'>('sales');
 
   const [sheetSearchString, setSheetSearchString] = useState<string>('');
@@ -1365,6 +1380,230 @@ export default function App() {
       alert(statusText);
     } catch (err: any) {
       alert("Error parsing and uploading sheets data: " + err.message);
+    }
+  };
+
+  const fetchAndSyncHostedCSV = async (urlToFetch: string, isSilent: boolean = false) => {
+    const targetUrl = urlToFetch?.trim();
+    if (!targetUrl) {
+      if (!isSilent) {
+        alert("Please specify a valid hosted CSV or published Google Sheet URL.");
+      }
+      return;
+    }
+
+    if (!isSilent) {
+      setHostedCsvSyncStatus('🔄 Fetching CSV from live URL...');
+    }
+    try {
+      const response = await fetch(targetUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      }
+      const text = await response.text();
+      if (!text || text.trim().length === 0) {
+        throw new Error("Received empty content from the provided URL.");
+      }
+
+      const allRows = parseCSVBytes(text);
+      if (allRows.length < 2) {
+        throw new Error("Parsed data does not contain enough rows (header + at least one product row required).");
+      }
+
+      const headers = allRows[0].map(h => h.trim().toLowerCase());
+      const getColIdx = (aliases: string[]) => {
+        return headers.findIndex(h => aliases.some(alias => h === alias || h.includes(alias)));
+      };
+
+      const idxDisplayOrder = getColIdx(['display order']);
+      const idxFloorDisplay = getColIdx(['floor display', 'display floor', 'on floor']);
+      const idxBrand = getColIdx(['brand']);
+      const idxProductCode = getColIdx(['product code', 'prod code', 'code']);
+      const idxCategory = getColIdx(['category', 'cat']);
+      const idxDescHeadline = getColIdx(['description headline', 'headline']);
+      const idxDescBullets = getColIdx(['description bullets', 'bullets']);
+      const idxTechSpecs = getColIdx(['technical specs', 'specs', 'spec']);
+      const idxPrice = getColIdx(['price (₦)', 'price', 'naira price']);
+      const idxFrontImage = getColIdx(['front image']);
+      const idxSideImage = getColIdx(['side image']);
+      const idxBackImage = getColIdx(['back image']);
+      const idxTopImage = getColIdx(['top image']);
+      const idxVideo = getColIdx(['video (cloudinary)', 'video']);
+      const idxAssurance = getColIdx(['assurance text', 'assurance', 'footer']);
+      const idxStockStatus = getColIdx(['stock status', 'stock', 'status']);
+
+      const dataRows = allRows.slice(1);
+      const parsedProducts: Product[] = [];
+      const parsedPhotos: any[] = [];
+      const parsedVideos: any[] = [];
+      const parsedFloorCodes: string[] = [];
+
+      dataRows.forEach((row, rowIndex) => {
+        const prodCode = idxProductCode !== -1 ? (row[idxProductCode] || '').trim() : `X-${1000 + rowIndex}`;
+        if (!prodCode) return;
+
+        const displayOrder = idxDisplayOrder !== -1 ? (row[idxDisplayOrder] || '').trim() : '';
+        const floorDisplay = idxFloorDisplay !== -1 ? (row[idxFloorDisplay] || '').trim().toLowerCase() : '';
+        const brand = idxBrand !== -1 ? (row[idxBrand] || '').trim() : 'HITECH';
+        const categoryPhrase = idxCategory !== -1 ? (row[idxCategory] || '').trim() : 'Accessories';
+        const descHeadline = idxDescHeadline !== -1 ? (row[idxDescHeadline] || '').trim() : '';
+        const descBullets = idxDescBullets !== -1 ? (row[idxDescBullets] || '').trim() : '';
+        const techSpecs = idxTechSpecs !== -1 ? (row[idxTechSpecs] || '').trim() : '';
+        const price = idxPrice !== -1 ? (row[idxPrice] || '').trim() : 'CALL';
+        const frontImage = idxFrontImage !== -1 ? (row[idxFrontImage] || '').trim() : '';
+        const video = idxVideo !== -1 ? (row[idxVideo] || '').trim() : '';
+        const assurance = idxAssurance !== -1 ? (row[idxAssurance] || '').trim() : (row[9] || '').trim();
+        const stockStatus = idxStockStatus !== -1 ? (row[idxStockStatus] || '').trim() : (row[17] || row[8] || 'In Stock').trim();
+
+        // Category mapping
+        const catStr = categoryPhrase.toLowerCase();
+        let catId = 'accessories';
+        if (catStr.includes('laptop')) catId = 'laptops';
+        else if (catStr.includes('printer')) catId = 'printers';
+        else if (catStr.includes('desktop') || catStr.includes('all-in-one') || catStr.includes('pc')) catId = 'desktops';
+        else if (catStr.includes('camera')) catId = 'cameras';
+        else if (catStr.includes('cctv') || catStr.includes('security')) catId = 'cctv';
+        else if (catStr.includes('network')) catId = 'networking';
+        else if (catStr.includes('monitor')) catId = 'monitors';
+        else if (catStr.includes('software')) catId = 'software';
+        else if (catStr.includes('phone') || catStr.includes('tablet')) catId = 'phones_tablets';
+        else if (catStr.includes('solar')) catId = 'solar_hub';
+
+        // Unique numeric ID based on code hash
+        let codeHash = 0;
+        for (let c = 0; c < prodCode.length; c++) {
+          codeHash += prodCode.charCodeAt(c);
+        }
+        const numericId = 100000 + (codeHash * 73) % 899999 + rowIndex;
+
+        const combinedSpecs = techSpecs || descBullets || "Certified original setup hardware system.";
+
+        const newProd: Product | any = {
+          id: numericId,
+          pn: prodCode,
+          cat: catId,
+          brand: brand,
+          n: `${brand} ${descHeadline || 'System'}`.trim(),
+          sp: combinedSpecs,
+          price: price.startsWith('₦') ? price : `₦${price}`,
+          desc: descBullets || descHeadline || 'Awaiting supervisor technical inspection clearance.',
+          imageUrl: frontImage || "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300",
+          displayOrder: displayOrder,
+          assurance: assurance,
+          stockStatus: stockStatus,
+          bullets: descBullets
+        };
+        parsedProducts.push(newProd);
+
+        if (frontImage) {
+          parsedPhotos.push({
+            id: `sheet_front_${prodCode}`,
+            url: frontImage,
+            label: `${brand} ${descHeadline}`.trim() + " (Front View)",
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price.startsWith('₦') ? price : `₦${price}`,
+            isCustom: true
+          });
+        }
+        
+        const sideImage = idxSideImage !== -1 ? (row[idxSideImage] || '').trim() : '';
+        if (sideImage) {
+          parsedPhotos.push({
+            id: `sheet_side_${prodCode}`,
+            url: sideImage,
+            label: `${brand} (Side View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const backImage = idxBackImage !== -1 ? (row[idxBackImage] || '').trim() : '';
+        if (backImage) {
+          parsedPhotos.push({
+            id: `sheet_back_${prodCode}`,
+            url: backImage,
+            label: `${brand} (Back View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        const topImage = idxTopImage !== -1 ? (row[idxTopImage] || '').trim() : '';
+        if (topImage) {
+          parsedPhotos.push({
+            id: `sheet_top_${prodCode}`,
+            url: topImage,
+            label: `${brand} (Top View)`,
+            sub: `Product Code: ${prodCode}`,
+            productCode: prodCode,
+            price: price,
+            isCustom: true
+          });
+        }
+
+        if (video) {
+          parsedVideos.push({
+            id: `sheet_vid_${prodCode}`,
+            url: video,
+            title: `${brand} ${descHeadline} Walkthrough Video`.trim(),
+            desc: `Imported automated short demo clip. Code: ${prodCode}`
+          });
+        }
+
+        const isOnFloor = floorDisplay.startsWith('y') || floorDisplay === 'true' || floorDisplay === 'yes' || (displayOrder !== '' && floorDisplay !== 'no' && floorDisplay !== 'n');
+        if (isOnFloor) {
+          parsedFloorCodes.push(displayOrder || String(numericId));
+        }
+      });
+
+      if (parsedProducts.length === 0) {
+        throw new Error("No valid products identified in rows.");
+      }
+
+      await handleUpdateProducts(parsedProducts);
+      if (parsedFloorCodes.length > 0) {
+        const newLayout = parsedFloorCodes.join(', ');
+        const nextSaved = { ...displayFloorSavedConfigs, "Last Imported Sheet": newLayout };
+        await handleSaveDisplayFloor(newLayout, nextSaved);
+      }
+      if (parsedPhotos.length > 0) {
+        const customPhotos = galleryPhotos.filter(p => !String(p.id).startsWith('sheet_'));
+         await saveGalleryPhotosToStorage([...parsedPhotos, ...customPhotos]);
+      }
+      if (parsedVideos.length > 0) {
+        setGalleryVideos(prev => {
+          const customVids = prev.filter(v => !String(v.id).startsWith('sheet_vid_'));
+          const joined = [...parsedVideos, ...customVids];
+          localStorage.setItem('ht_videos', JSON.stringify(joined));
+          return joined;
+        });
+      }
+
+      setSpreadsheetHeaders(allRows[0]);
+      setSpreadsheetRows(allRows.slice(1));
+      localStorage.setItem('ht_spreadsheet_headers', JSON.stringify(allRows[0]));
+      localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(allRows.slice(1)));
+
+      const statusText = `✅ Google Sheets CSV loaded successfully! 📊 ${parsedProducts.length} products synced live.`;
+      setCsvUploadStatus(statusText);
+      localStorage.setItem('ht_csv_upload_status', statusText);
+      
+      setHostedCsvSyncStatus(`Last Synced: ${new Date().toLocaleTimeString()} (Success)`);
+      if (!isSilent) {
+        alert(statusText);
+      }
+    } catch (err: any) {
+      console.error("Hosted CSV Sync Error:", err);
+      const errMessage = `⚠️ Sync Failed: ${err.message || err}`;
+      setHostedCsvSyncStatus(errMessage);
+      if (!isSilent) {
+        alert(errMessage + "\nPlease verify the CSV URL is accessible and allows CORS requests.");
+      }
     }
   };
 
@@ -2089,6 +2328,11 @@ export default function App() {
           };
           setCloudinaryConfig(configVal);
           localStorage.setItem('ht_cloudinary_config', JSON.stringify(configVal));
+        } else if (id === 'hosted_csv') {
+          if (data.url) {
+            setHostedCsvUrl(data.url);
+            localStorage.setItem('ht_hosted_csv_url', data.url);
+          }
         }
       });
     }, (error) => {
@@ -2101,6 +2345,12 @@ export default function App() {
       unsubConf();
     };
   }, []);
+
+  useEffect(() => {
+    if (hostedCsvUrl) {
+      fetchAndSyncHostedCSV(hostedCsvUrl, true);
+    }
+  }, [hostedCsvUrl]);
 
   // Save to local storage triggers
   const saveCartToStorage = (updatedCart: any) => {
@@ -5465,6 +5715,36 @@ Message: ${quickMessageText}`;
                       </div>
                     </div>
                   )}
+
+                  {/* Hosted CSV Auto-Sync Link */}
+                  <div className="border-t border-zinc-900 pt-3 mt-3 text-left">
+                    <span className="text-[10px] uppercase tracking-wider font-mono font-bold text-[#F5C518] block mb-1">🌐 Hosted CSV URL/Published Google Sheet CSV Link</span>
+                    <p className="text-[10px] text-zinc-400 mb-2">
+                      Submit a publicly hosted CSV file URL or a Google Sheet "Published to the Web" as a CSV. The app automatically fetches and populates database records on app load for any client domain.
+                    </p>
+                    <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                      <input
+                        id="hosted-csv-url-input"
+                        type="url"
+                        placeholder="e.g. https://docs.google.com/spreadsheets/d/e/2PACX-1vXXXXX/pub?output=csv"
+                        value={hostedCsvUrl}
+                        onChange={(e) => handleUpdateHostedCsvUrl(e.target.value)}
+                        className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-[#F5C518] text-white rounded-xl px-3 py-2 text-xs font-mono outline-none transition"
+                      />
+                      <button
+                        onClick={() => fetchAndSyncHostedCSV(hostedCsvUrl, false)}
+                        className="bg-zinc-800 hover:bg-[#F5C518] text-zinc-300 hover:text-black border border-zinc-700 hover:border-[#F5C518] hover:font-bold text-xs px-4 py-2 rounded-xl transition duration-150 shrink-0 uppercase font-bold"
+                      >
+                        🔄 Fetch & Sync Live
+                      </button>
+                    </div>
+                    {hostedCsvSyncStatus && (
+                      <p className="text-[10px] font-mono text-zinc-400 mt-1.5 flex items-center gap-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Auto-Sync Status: {hostedCsvSyncStatus}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Staff Configuration Workspace */}
