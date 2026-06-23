@@ -470,6 +470,231 @@ export const PRODS: Product[] = [
     sp: 'Power regulator / hardware accessory - details pending',
     price: 'CALL',
     desc: 'Awaiting tech spec datasheet assignment for this slot.'
+  },
+  {
+    id: 131,
+    pn: 'HP-422U0EA',
+    cat: 'laptops',
+    n: 'HP Envy',
+    sp: 'If you are looking for a compact premium laptop, the HP Envy 13-inch is for you.',
+    price: 'CALL',
+    desc: '• Compact 13-inch design\n• 8GB RAM\n• 512GB SSD storage\n8GB RAM, 512GB SSD, 13-inch display'
+  },
+  {
+    id: 132,
+    pn: 'TBC-132',
+    cat: 'laptops',
+    n: 'HP 14 Laptop (Silver)',
+    sp: 'If you are looking for a dependable everyday laptop, the HP 14 i3 (Silver) is for you.',
+    price: 'CALL',
+    desc: '• Intel Core i3\n• 8GB RAM\n• 512GB SSD storage\nIntel Core i3, 8GB RAM, 512GB SSD, 14-inch display'
+  },
+  {
+    id: 133,
+    pn: 'TBC-133',
+    cat: 'laptops',
+    n: 'HP 14 Laptop (Dark Silver)',
+    sp: 'If you are looking for a dependable everyday laptop, the HP 14 i3 (Dark Silver) is for you.',
+    price: 'CALL',
+    desc: '• Intel Core i3\n• 8GB RAM\n• 512GB SSD storage\nIntel Core i3, 8GB RAM, 512GB SSD, 14-inch display'
+  },
+  {
+    id: 134,
+    pn: 'TBC-134',
+    cat: 'laptops',
+    n: 'HP 14 Laptop (Black, 256GB)',
+    sp: 'If you are looking for an affordable everyday laptop, the HP 14 i3 (Black, 256GB) is for you.',
+    price: 'CALL',
+    desc: '• Intel Core i3\n• 8GB RAM\n• 256GB SSD storage\nIntel Core i3, 8GB RAM, 256GB SSD, 14-inch display'
+  },
+  {
+    id: 135,
+    pn: 'OREX-240AH',
+    cat: 'solar_hub',
+    n: 'Orex Solar Battery',
+    sp: 'If you are looking for a reliable inverter battery, the Orex 240Ah/12V Battery is for you.',
+    price: 'CALL',
+    desc: '• 240Ah capacity\n• 12V output\n• Built for inverter backup\n240Ah, 12V, deep-cycle battery for inverter use'
+  },
+  {
+    id: 136,
+    pn: 'WEXCELL-240AH',
+    cat: 'solar_hub',
+    n: 'WEXcell Solar Battery',
+    sp: 'If you are looking for a reliable inverter battery, the WEXcell 240Ah/12V Battery is for you.',
+    price: 'CALL',
+    desc: '• 240Ah capacity\n• 12V output\n• Built for inverter backup\n240Ah, 12V, deep-cycle battery for inverter use'
+  },
+  {
+    id: 137,
+    pn: 'TBC-137',
+    cat: 'laptops',
+    n: 'HP Pavilion (Dark Purple)',
+    sp: '512GB SSD, 14-inch display, RAM TBC.',
+    price: 'CALL',
+    desc: '• 14-inch display\n• 512GB SSD storage\n• RAM to be confirmed'
+  },
+  {
+    id: 138,
+    pn: 'TBC-138',
+    cat: 'laptops',
+    n: 'HP Pavilion (Silver, 1TB)',
+    sp: '1TB SSD, 14-inch display, RAM TBC.',
+    price: 'CALL',
+    desc: '• 14-inch display\n• 1TB SSD storage\n• RAM to be confirmed'
+  },
+  {
+    id: 139,
+    pn: 'TBC-139',
+    cat: 'laptops',
+    n: 'HP OmniBook (Silver/White, 16GB)',
+    sp: '16GB RAM, 14-inch display, storage noted as 1TB.',
+    price: 'CALL',
+    desc: '• 16GB RAM\n• 14-inch display\n• Storage size to be confirmed'
+  },
+  {
+    id: 140,
+    pn: 'TBC-140',
+    cat: 'laptops',
+    n: 'HP OmniBook (Baby Pink, 16GB)',
+    sp: '16GB RAM, 14-inch display, smaller storage option.',
+    price: 'CALL',
+    desc: '• 16GB RAM\n• 14-inch display\n• Smaller storage option of the two OmniBooks -- exact size to be confirmed\n16GB RAM, 14-inch display, storage noted as 512GB but unclear in recording -- TBC'
+  },
+  {
+    id: 141,
+    pn: 'TBC-141',
+    cat: 'laptops',
+    n: 'HP ProBook 16GB/512GB',
+    sp: '16GB RAM, 512GB SSD, screen size TBC.',
+    price: 'CALL',
+    desc: '• 16GB RAM\n• 512GB SSD storage\n• Screen size to be confirmed'
+  },
+  {
+    id: 142,
+    pn: 'TBC-142',
+    cat: 'laptops',
+    n: 'HP Celeron 8GB/512GB',
+    sp: 'Celeron processor, 8GB RAM, 512GB SSD, series/model and screen size TBC.',
+    price: 'CALL',
+    desc: '• Intel Celeron processor\n• 8GB RAM\n• 512GB SSD storage\n• Exact model to be confirmed'
+  },
+  {
+    id: 143,
+    pn: 'TBC-143',
+    cat: 'laptops',
+    n: 'HP Victus Gaming',
+    sp: '8GB RAM, 512GB SSD, 15-inch display, Wi-Fi enabled.',
+    price: 'CALL',
+    desc: '• 8GB RAM\n• 512GB SSD storage\n• 15-inch display\n• Wi-Fi enabled'
+  },
+  {
+    id: 144,
+    pn: 'TBC-144',
+    cat: 'laptops',
+    n: 'HP Celeron FreeDOS',
+    sp: 'Celeron processor, 8GB RAM, FreeDOS (no licensed Windows), 15-inch display.',
+    price: 'CALL',
+    desc: '• Intel Celeron processor\n• 8GB RAM\n• 15-inch display\n• Runs FreeDOS (no pre-installed Windows)\n• Storage size to be confirmed'
+  },
+  {
+    id: 145,
+    pn: 'TBC-145',
+    cat: 'laptops',
+    n: 'HP Celeron 256GB SSD',
+    sp: 'Celeron processor, 256GB SSD, 15-inch display, RAM TBC.',
+    price: 'CALL',
+    desc: '• Intel Celeron processor\n• 256GB SSD storage\n• 15-inch display\n• Most affordable SSD unit on the floor\n• RAM to be confirmed'
+  },
+  {
+    id: 146,
+    pn: 'TBC-146',
+    cat: 'solar_hub',
+    n: 'Cworth Solar Battery (6kW)',
+    sp: '6kW capacity, battery vs inverter TBC.',
+    price: 'CALL',
+    desc: '• 6kW capacity\n• Cworth solar range\n• Battery or inverter type to be confirmed'
+  },
+  {
+    id: 147,
+    pn: 'TBC-147',
+    cat: 'solar_hub',
+    n: 'Cworth Solar Battery (15kW Blue Carbon)',
+    sp: '15kW capacity, Blue Carbon sub-brand within this line, battery vs inverter TBC.',
+    price: 'CALL',
+    desc: '• 15kW capacity\n• "Blue Carbon" sub-brand within the Cworth range\n• May match an existing catalogue item -- to be confirmed'
+  },
+  {
+    id: 148,
+    pn: 'TBC-148',
+    cat: 'solar_hub',
+    n: 'Cworth Solar Battery (20kW)',
+    sp: '20kW capacity, battery vs inverter TBC.',
+    price: 'CALL',
+    desc: '• 20kW capacity\n• Cworth solar range\n• May match an existing catalogue item -- to be confirmed'
+  },
+  {
+    id: 149,
+    pn: 'TBC-149',
+    cat: 'solar_hub',
+    n: '5kW Lithium Battery (TBC Brand)',
+    sp: '5kW lithium battery, standalone unit, brand TBC.',
+    price: 'CALL',
+    desc: '• 5kW lithium battery\n• Standalone unit\n• Brand to be confirmed'
+  },
+  {
+    id: 150,
+    pn: 'TBC-150',
+    cat: 'solar_hub',
+    n: 'Growatt Solar Battery',
+    sp: 'Lithium battery option, capacity TBC.',
+    price: 'CALL',
+    desc: '• Growatt lithium battery option\n• Capacity to be confirmed'
+  },
+  {
+    id: 151,
+    pn: 'TBC-151',
+    cat: 'solar_hub',
+    n: 'All-in-One Solar System',
+    sp: 'All-in-one inverter + battery "Power Tank" system, brand/capacity TBC.',
+    price: 'CALL',
+    desc: '• All-in-one inverter and battery in a single unit\n• Only one unit currently on the floor\n• Brand and capacity to be confirmed'
+  },
+  {
+    id: 152,
+    pn: 'TBC-152',
+    cat: 'solar_hub',
+    n: 'Deye Solar Inverter',
+    sp: 'Power inverter, capacity TBC.',
+    price: 'CALL',
+    desc: '• Deye power inverter\n• Capacity to be confirmed'
+  },
+  {
+    id: 153,
+    pn: 'TBC-153',
+    cat: 'solar_hub',
+    n: 'Choice Solar Inverter',
+    sp: 'Capacity TBC.',
+    price: 'CALL',
+    desc: '• Choice solar inverter\n• Capacity to be confirmed'
+  },
+  {
+    id: 154,
+    pn: 'TBC-154',
+    cat: 'solar_hub',
+    n: 'Felicity Solar Inverter',
+    sp: 'Capacity TBC.',
+    price: 'CALL',
+    desc: '• Felicity solar inverter\n• Capacity to be confirmed'
+  },
+  {
+    id: 155,
+    pn: 'TBC-155',
+    cat: 'solar_hub',
+    n: 'iSense Solar Inverter/Charge Controller',
+    sp: '48V, 120A rating, inverter vs charge controller TBC.',
+    price: 'CALL',
+    desc: '• 48V, 120A rating\n• May be a solar charge controller rather than an inverter -- to be confirmed'
   }
 ];
 

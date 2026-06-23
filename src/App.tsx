@@ -876,16 +876,31 @@ export default function App() {
   const [displayFloorSavedConfigs, setDisplayFloorSavedConfigs] = useState<{ [name: string]: string }>(() => {
     try {
       const stored = localStorage.getItem('ht_display_floor_saved');
-      return stored ? JSON.parse(stored) : {
-        "Default": "1, 2, 3, 4, 14, 25, 30, 42",
+      const parsed = stored ? JSON.parse(stored) : null;
+      if (parsed) {
+        return {
+          "Default": "131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155",
+          "Promo High": "14, 25, 30, 42, 44",
+          "Seasonal Deals": "45, 46, 47, 48, 49",
+          "Workbook Display": parsed["Workbook Display"] || "",
+          "Last Imported Sheet": parsed["Last Imported Sheet"] || "",
+          ...parsed
+        };
+      }
+      return {
+        "Default": "131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155",
         "Promo High": "14, 25, 30, 42, 44",
-        "Seasonal Deals": "45, 46, 47, 48, 49"
+        "Seasonal Deals": "45, 46, 47, 48, 49",
+        "Workbook Display": "",
+        "Last Imported Sheet": ""
       };
     } catch {
       return {
-        "Default": "1, 2, 3, 4, 14, 25, 30, 42",
+        "Default": "131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155",
         "Promo High": "14, 25, 30, 42, 44",
-        "Seasonal Deals": "45, 46, 47, 48, 49"
+        "Seasonal Deals": "45, 46, 47, 48, 49",
+        "Workbook Display": "",
+        "Last Imported Sheet": ""
       };
     }
   });
@@ -1390,6 +1405,8 @@ export default function App() {
         setSpreadsheetRows(allRows.slice(1));
         localStorage.setItem('ht_spreadsheet_headers', JSON.stringify(allRows[0]));
         localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(allRows.slice(1)));
+        localStorage.setItem('ht_last_imported_headers', JSON.stringify(allRows[0]));
+        localStorage.setItem('ht_last_imported_rows', JSON.stringify(allRows.slice(1)));
       }
 
       const day = new Date().getDate();
@@ -1418,7 +1435,7 @@ export default function App() {
     }
   };
 
-  const handleSyncSpreadsheetToDatabase = async (customHeaders: string[], customRows: string[][], isSilent: boolean = false) => {
+  const handleSyncSpreadsheetToDatabase = async (customHeaders: string[], customRows: string[][], isSilent: boolean = false, skipLayoutUpdate: boolean = false) => {
     try {
       if (customRows.length === 0) {
         if (!isSilent) alert("Cannot sync an empty spreadsheet. Please add at least one product row.");
@@ -1583,7 +1600,7 @@ export default function App() {
 
       await handleUpdateProducts(parsedProducts);
       
-      if (parsedFloorCodes.length > 0) {
+      if (parsedFloorCodes.length > 0 && !skipLayoutUpdate) {
         const newLayout = parsedFloorCodes.join(', ');
         const nextSaved = { ...displayFloorSavedConfigs, "Workbook Display": newLayout };
         await handleSaveDisplayFloor(newLayout, nextSaved);
@@ -2450,6 +2467,34 @@ export default function App() {
     }
   };
 
+const DEFAULT_HARDCODED_CSV = [
+  ["131", "HP", "HP-422U0EA", "HP Envy", "If you are looking for a compact premium laptop, the HP Envy 13-inch is for you.", "• Compact 13-inch design\n• 8GB RAM\n• 512GB SSD storage", "8GB RAM, 512GB SSD, 13-inch display", "CALL", "In Stock", "Yes", "", "", "", "", "", "New unit found on showroom floor (June 2026 walkthrough). Code confirmed via web search (model 13-ba1039nia, part 422U0EA) -- verify against unit sticker before finalizing.", "No"],
+  ["132", "HP", "TBC-132", "HP 14 Laptop", "If you are looking for a dependable everyday laptop, the HP 14 i3 (Silver) is for you.", "• Intel Core i3\n• 8GB RAM\n• 512GB SSD storage", "Intel Core i3, 8GB RAM, 512GB SSD, 14-inch display", "CALL", "In Stock", "Yes", "", "", "", "", "", "New unit, silver finish. Confirm exact model code -- may already match an existing HP 14 entry in this catalogue. Possible candidate codes (need sticker confirmation): A6TE7EA (14-ep0063nia), A1LL1EA (14-ep0096nia). IMPORTANT: check this is not a duplicate of existing catalogue item HP-C40ZKEA (14-ep0179nia, also 8GB/512GB/i3/natural silver) before adding as a new SKU.", "No"],
+  ["133", "HP", "TBC-133", "HP 14 Laptop", "If you are looking for a dependable everyday laptop, the HP 14 i3 (Dark Silver) is for you.", "• Intel Core i3\n• 8GB RAM\n• 512GB SSD storage", "Intel Core i3, 8GB RAM, 512GB SSD, 14-inch display", "CALL", "In Stock", "Yes", "", "", "", "", "", "New unit, darker silver finish, same specs as the other HP 14 unit. Confirm exact model code -- may already match an existing HP 14 entry in this catalogue. Possible candidate codes (need sticker confirmation): A6TE7EA (14-ep0063nia), A1LL1EA (14-ep0096nia). IMPORTANT: check this is not a duplicate of existing catalogue item HP-C40ZKEA (14-ep0179nia, also 8GB/512GB/i3/natural silver) before adding as a new SKU.", "No"],
+  ["134", "HP", "TBC-134", "HP 14 Laptop", "If you are looking for an affordable everyday laptop, the HP 14 i3 (Black, 256GB) is for you.", "• Intel Core i3\n• 8GB RAM\n• 256GB SSD storage", "Intel Core i3, 8GB RAM, 256GB SSD, 14-inch display", "CALL", "In Stock", "Yes", "", "", "", "", "", "Same family as the other HP 14 units but smaller 256GB storage option. Confirm exact model code.", "No"],
+  ["135", "Orex", "OREX-240AH", "Solar Battery", "If you are looking for a reliable inverter battery, the Orex 240Ah/12V Battery is for you.", "• 240Ah capacity\n• 12V output\n• Built for inverter backup", "240Ah, 12V, deep-cycle battery for inverter use", "CALL", "In Stock", "Yes", "", "", "", "", "", "New brand to the catalogue -- confirm exact model/series name and product code.", "No"],
+  ["136", "WEXcell", "WEXCELL-240AH", "Solar Battery", "If you are looking for a reliable inverter battery, the WEXcell 240Ah/12V Battery is for you.", "• 240Ah capacity\n• 12V output\n• Built for inverter backup", "240Ah, 12V, deep-cycle battery for inverter use", "CALL", "In Stock", "Yes", "", "", "", "", "", "New brand to the catalogue -- confirm exact model/series name and product code.", "No"],
+  ["137", "HP", "TBC-137", "HP Pavilion", "512GB SSD, 14-inch display, RAM TBC.", "• 14-inch display\n• 512GB SSD storage\n• RAM to be confirmed", "512GB SSD, 14-inch display, RAM TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm RAM size before listing.", "Yes"],
+  ["138", "HP", "TBC-138", "HP Pavilion", "1TB SSD, 14-inch display, RAM TBC.", "• 14-inch display\n• 1TB SSD storage\n• RAM to be confirmed", "1TB SSD, 14-inch display, RAM TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm RAM size before listing.", "Yes"],
+  ["139", "HP", "TBC-139", "HP OmniBook", "16GB RAM, 14-inch display, storage noted as 1TB.", "• 16GB RAM\n• 14-inch display\n• Storage size to be confirmed", "16GB RAM, 14-inch display, storage noted as 1TB but unclear in recording -- TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm exact storage size -- audio was unclear during the walkthrough recording.", "Yes"],
+  ["140", "HP", "TBC-140", "HP OmniBook", "16GB RAM, 14-inch display, smaller storage option.", "• 16GB RAM\n• 14-inch display\n• Smaller storage option of the two OmniBooks -- exact size to be confirmed", "16GB RAM, 14-inch display, storage noted as 512GB but unclear in recording -- TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm exact storage size -- this is the smaller-storage OmniBook of the two; audio was unclear during the walkthrough recording.", "Yes"],
+  ["141", "HP", "TBC-141", "HP ProBook", "16GB RAM, 512GB SSD, screen size TBC.", "• 16GB RAM\n• 512GB SSD storage\n• Screen size to be confirmed", "16GB RAM, 512GB SSD, screen size TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm screen size and exact model code. Web search found at least 5 current HP ProBook models sold in Nigeria with this exact 16GB/512GB spec (different processor families -- Intel Core 5, Core Ultra 5, Core 7, AMD Ryzen 5/7), so spec alone cannot narrow it down. Sticker check required.", "Yes"],
+  ["142", "HP", "TBC-142", "Pending Confirmation", "Celeron processor, 8GB RAM, 512GB SSD, series/model and screen size TBC.", "• Intel Celeron processor\n• 8GB RAM\n• 512GB SSD storage\n• Exact model to be confirmed", "Celeron processor, 8GB RAM, 512GB SSD, series/model and screen size TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Celeron-powered unit -- confirm exact HP series/model name and screen size before cataloguing.", "Yes"],
+  ["143", "HP", "TBC-143", "HP Victus Gaming", "8GB RAM, 512GB SSD, 15-inch display, Wi-Fi enabled.", "• 8GB RAM\n• 512GB SSD storage\n• 15-inch display\n• Wi-Fi enabled", "8GB RAM, 512GB SSD, 15-inch display, Wi-Fi enabled, exact model/resolution TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm exact Victus model number and screen resolution -- audio was unclear during the walkthrough recording.", "Yes"],
+  ["144", "HP", "TBC-144", "Pending Confirmation", "Celeron processor, 8GB RAM, FreeDOS (no licensed Windows), 15-inch display.", "• Intel Celeron processor\n• 8GB RAM\n• 15-inch display\n• Runs FreeDOS (no pre-installed Windows)\n• Storage size to be confirmed", "Celeron processor, 8GB RAM, FreeDOS (no licensed Windows), 15-inch display, storage TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm storage size and exact model. Note: this unit ships with FreeDOS, not Windows -- affects pricing/positioning, flag clearly for customers.", "Yes"],
+  ["145", "HP", "TBC-145", "Pending Confirmation", "Celeron processor, 256GB SSD, 15-inch display, RAM TBC.", "• Intel Celeron processor\n• 256GB SSD storage\n• 15-inch display\n• Most affordable SSD unit on the floor\n• RAM to be confirmed", "Celeron processor, 256GB SSD, 15-inch display, RAM TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Cheapest SSD unit on the floor -- confirm RAM and exact model.", "Yes"],
+  ["146", "Cworth", "TBC-146", "Solar Battery", "6kW capacity, battery vs inverter TBC.", "• 6kW capacity\n• Cworth solar range\n• Battery or inverter type to be confirmed", "6kW capacity, battery vs inverter TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm whether this is a battery or inverter. Also confirm brand spelling -- Cworth vs the existing Cworld line already in this catalogue.", "Yes"],
+  ["147", "Cworth", "TBC-147", "Solar Battery", "15kW capacity, Blue Carbon sub-brand within this line, battery vs inverter TBC.", "• 15kW capacity\n• \"Blue Carbon\" sub-brand within the Cworth range\n• May match an existing catalogue item -- to be confirmed", "15kW capacity, \"Blue Carbon\" sub-brand within this line, battery vs inverter TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Possible duplicate of the existing Blue Carbon 15kWh entry already catalogued -- confirm before treating as a new SKU. Also confirm Cworth vs Cworld brand.", "Yes"],
+  ["148", "Cworth", "TBC-148", "Solar Battery", "20kW capacity, battery vs inverter TBC.", "• 20kW capacity\n• Cworth solar range\n• May match an existing catalogue item -- to be confirmed", "20kW capacity, battery vs inverter TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Possible duplicate of the existing Cworld 20kWh entry already catalogued -- confirm before treating as a new SKU. Also confirm Cworth vs Cworld brand.", "Yes"],
+  ["149", "TBC", "TBC-149", "Solar Battery", "5kW lithium battery, standalone unit, brand TBC.", "• 5kW lithium battery\n• Standalone unit\n• Brand to be confirmed", "5kW lithium battery, standalone unit, brand TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Brand name not captured during the walkthrough -- confirm.", "Yes"],
+  ["150", "Growatt", "TBC-150", "Solar Battery", "Lithium battery option, capacity TBC.", "• Growatt lithium battery option\n• Capacity to be confirmed", "Lithium battery option, capacity TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm exact capacity (kWh).", "Yes"],
+  ["151", "TBC", "TBC-151", "Solar All-in-One", "All-in-one inverter + battery \"Power Tank\" system, brand/capacity TBC.", "• All-in-one inverter and battery in a single unit\n• Only one unit currently on the floor\n• Brand and capacity to be confirmed", "All-in-one inverter + battery \"Power Tank\" system, brand/capacity TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Only one unit was on the floor -- confirm brand and capacity.", "Yes"],
+  ["152", "Deye", "TBC-152", "Solar Inverter", "Power inverter, capacity TBC.", "• Deye power inverter\n• Capacity to be confirmed", "Power inverter, capacity TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm capacity -- the catalogue currently only has a Deye battery, this would be a new inverter SKU.", "Yes"],
+  ["153", "Choice", "TBC-153", "Solar Inverter", "Capacity TBC.", "• Choice solar inverter\n• Capacity to be confirmed", "Capacity TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm which capacity -- the catalogue already has 5 Choice inverter variants, check this isn't a duplicate.", "Yes"],
+  ["154", "Felicity", "TBC-154", "Solar Inverter", "Capacity TBC.", "• Felicity solar inverter\n• Capacity to be confirmed", "Capacity TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "Confirm which capacity -- the catalogue already has 5 Felicity inverter variants, check this isn't a duplicate.", "Yes"],
+  ["155", "iSense", "TBC-155", "Solar Inverter", "48V, 120A rating, inverter vs charge controller TBC.", "• 48V, 120A rating\n• May be a solar charge controller rather than an inverter -- to be confirmed", "48V, 120A rating, inverter vs charge controller TBC", "CALL", "In Stock", "Yes", "", "", "", "", "", "120A is usually a charge-controller rating rather than an inverter rating -- please confirm whether this is actually a solar charge controller, not an inverter, before cataloguing.", "Yes"]
+];
+
   const handleSaveDisplayFloor = async (activeLayout: string, savedConfigs: { [name: string]: string }) => {
     setDisplayFloorActiveLayout(activeLayout);
     setDisplayFloorSavedConfigs(savedConfigs);
@@ -2460,6 +2505,39 @@ export default function App() {
     } catch (err) {
       console.warn("Display floor config cloud update offline fallback: ", err);
     }
+  };
+
+  const applyPreset = async (name: string) => {
+    const layoutIds = displayFloorSavedConfigs[name];
+    if (layoutIds === undefined) return;
+
+    // 1. Update Display Floor layout
+    handleSaveDisplayFloor(layoutIds, displayFloorSavedConfigs);
+
+    // 2. Load the corresponding data into Sheet Manager
+    if (name === "Default") {
+      setSpreadsheetRows(DEFAULT_HARDCODED_CSV);
+      localStorage.setItem('ht_spreadsheet_rows', JSON.stringify(DEFAULT_HARDCODED_CSV));
+      // Optionally run the sync silently to apply to productsList immediately
+      handleSyncSpreadsheetToDatabase(spreadsheetHeaders, DEFAULT_HARDCODED_CSV, true, true);
+    } else if (name === "Workbook Display" || name === "Last Imported Sheet") {
+      try {
+        const lastRowsStr = localStorage.getItem('ht_last_imported_rows');
+        const lastHeadersStr = localStorage.getItem('ht_last_imported_headers');
+        if (lastRowsStr && lastHeadersStr) {
+          const rows = JSON.parse(lastRowsStr);
+          const headers = JSON.parse(lastHeadersStr);
+          setSpreadsheetHeaders(headers);
+          setSpreadsheetRows(rows);
+          localStorage.setItem('ht_spreadsheet_rows', lastRowsStr);
+          localStorage.setItem('ht_spreadsheet_headers', lastHeadersStr);
+          handleSyncSpreadsheetToDatabase(headers, rows, true, true);
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    alert(`✅ Loaded preset: "${name}"\n\nThe Display Floor and Sheet Manager have been updated to reflect this configuration.`);
   };
 
   const handleAddVideo = async (vid: { url: string; title: string; desc?: string }) => {
@@ -5555,7 +5633,7 @@ Message: ${quickMessageText}`;
                             <button
                               type="button"
                               onClick={() => {
-                                handleSaveDisplayFloor(seq as string, displayFloorSavedConfigs);
+                                applyPreset(name);
                               }}
                               className="hover:text-[#F5C518] transition uppercase"
                             >
@@ -7695,6 +7773,45 @@ Message: ${quickMessageText}`;
                           </div>
                         </div>
                       )}
+
+                      {/* Shared Display Floor Configured Presets */}
+                      <div className="bg-[#0b0c10] border border-zinc-800 rounded-xl p-4 space-y-3.5">
+                        <div className="flex items-center gap-2 text-xs font-mono text-[#F5C518] font-bold uppercase tracking-wider">
+                          <span>🗂️ PRECONFIGURED PRESETS (DISPLAY FLOOR)</span>
+                        </div>
+                        <p className="text-xs text-zinc-400">
+                          These configuration presets immediately update the live Display Floor. These are exactly the same presets active in the Display Floor view.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(displayFloorSavedConfigs).map(([name, seq]) => (
+                            <div key={name} className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 py-1.5 px-3 rounded-lg text-xs text-zinc-200 font-bold font-mono">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  applyPreset(name);
+                                }}
+                                className="hover:text-[#F5C518] transition uppercase"
+                              >
+                                📁 {name}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (name === 'Default') return alert("Cannot delete Default layout.");
+                                  if (window.confirm(`Delete layout preset "${name}"?`)) {
+                                    const nextSaved = { ...displayFloorSavedConfigs };
+                                    delete nextSaved[name];
+                                    handleSaveDisplayFloor(displayFloorActiveLayout, nextSaved);
+                                  }
+                                }}
+                                className="text-red-500 hover:text-red-450 font-mono text-xs ml-1 px-1 border-l border-zinc-800"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
                       {csvUploadNotification && (
                         <div className={`p-4 border rounded-xl transition-all duration-500 ${
