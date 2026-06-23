@@ -25,7 +25,7 @@ import { HTVideoPlayer } from './components/HTVideoPlayer';
 import { DocumentViewer } from './components/DocumentViewer';
 import ProductDetailOverlay, { getDefaultProductImage } from './components/ProductDetailOverlay';
 import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsService';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
 import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
@@ -164,6 +164,31 @@ export default function App() {
       await deleteDoc(doc(db, 'solar_products', id));
     } catch (e) {
       console.warn("Error deleting solar product from Cloud Firestore: ", e);
+    }
+  };
+
+  const handleBulkDeleteProducts = async (ids: (number | string)[]) => {
+    const idsString = ids.map(String);
+    const nextList = productsList.filter(p => !idsString.includes(String(p.id)));
+    setProductsList(nextList);
+    try {
+      localStorage.setItem('ht_products', JSON.stringify(nextList));
+      const promises = ids.map(id => deleteDoc(doc(db, 'products', String(id))));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn("Error bulk deleting products from Cloud Firestore: ", e);
+    }
+  };
+
+  const handleBulkDeleteSolarProducts = async (ids: string[]) => {
+    const nextList = solarProductsList.filter(s => !ids.includes(s.id));
+    setSolarProductsList(nextList);
+    try {
+      localStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      const promises = ids.map(id => deleteDoc(doc(db, 'solar_products', id)));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn("Error bulk deleting solar products from Cloud Firestore: ", e);
     }
   };
 
@@ -825,7 +850,16 @@ export default function App() {
   };
 
   const saveGalleryPhotosToStorage = async (updatedPhotos: any[]) => {
-    const formatted = updatedPhotos.map((photo: any) => {
+    // Robust deduplication by ID to prevent any duplicate accumulation in state or DB
+    const uniqueMap = new Map();
+    updatedPhotos.forEach((photo: any) => {
+      if (photo && photo.id) {
+        uniqueMap.set(String(photo.id), photo);
+      }
+    });
+    const uniquePhotos = Array.from(uniqueMap.values());
+
+    const formatted = uniquePhotos.map((photo: any) => {
       const item: any = {
         id: String(photo.id),
         url: photo.url,
@@ -950,6 +984,7 @@ export default function App() {
       };
 
       const idxDisplayOrder = getColIdx(['display order']);
+      const idxFloorDisplay = getColIdx(['floor display', 'display floor', 'on floor']);
       const idxBrand = getColIdx(['brand']);
       const idxProductCode = getColIdx(['product code', 'prod code', 'code']);
       const idxCategory = getColIdx(['category', 'cat']);
@@ -967,12 +1002,14 @@ export default function App() {
       const parsedProducts: Product[] = [];
       const parsedPhotos: any[] = [];
       const parsedVideos: any[] = [];
+      const parsedFloorCodes: string[] = [];
 
       dataRows.forEach((row, rowIndex) => {
         const prodCode = idxProductCode !== -1 ? (row[idxProductCode] || '').trim() : `X-${1000 + rowIndex}`;
         if (!prodCode) return;
 
         const displayOrder = idxDisplayOrder !== -1 ? (row[idxDisplayOrder] || '').trim() : '';
+        const floorDisplay = idxFloorDisplay !== -1 ? (row[idxFloorDisplay] || '').trim().toLowerCase() : '';
         const brand = idxBrand !== -1 ? (row[idxBrand] || '').trim() : 'HITECH';
         const categoryPhrase = idxCategory !== -1 ? (row[idxCategory] || '').trim() : 'Accessories';
         const descHeadline = idxDescHeadline !== -1 ? (row[idxDescHeadline] || '').trim() : '';
@@ -1077,6 +1114,11 @@ export default function App() {
             desc: `Imported automated short demo clip. Code: ${prodCode}`
           });
         }
+
+        const isOnFloor = floorDisplay.startsWith('y') || floorDisplay === 'true' || floorDisplay === 'yes' || (displayOrder !== '' && floorDisplay !== 'no' && floorDisplay !== 'n');
+        if (isOnFloor) {
+          parsedFloorCodes.push(displayOrder || String(numericId));
+        }
       });
 
       if (parsedProducts.length === 0) {
@@ -1085,12 +1127,21 @@ export default function App() {
       }
 
       await handleUpdateProducts(parsedProducts);
+      if (parsedFloorCodes.length > 0) {
+        const newLayout = parsedFloorCodes.join(', ');
+        const nextSaved = { ...displayFloorSavedConfigs, "Last Imported Sheet": newLayout };
+        await handleSaveDisplayFloor(newLayout, nextSaved);
+      }
       if (parsedPhotos.length > 0) {
-        await saveGalleryPhotosToStorage([...parsedPhotos, ...galleryPhotos]);
+        // Discard any previous spreadsheet imports (prefixed with 'sheet_') to prevent duplicate buildup
+        const customPhotos = galleryPhotos.filter(p => !String(p.id).startsWith('sheet_'));
+        await saveGalleryPhotosToStorage([...parsedPhotos, ...customPhotos]);
       }
       if (parsedVideos.length > 0) {
         setGalleryVideos(prev => {
-          const joined = [...parsedVideos, ...prev];
+          // Discard any previous spreadsheet video imports (prefixed with 'sheet_vid_')
+          const customVids = prev.filter(v => !String(v.id).startsWith('sheet_vid_'));
+          const joined = [...parsedVideos, ...customVids];
           localStorage.setItem('ht_videos', JSON.stringify(joined));
           return joined;
         });
@@ -1102,6 +1153,86 @@ export default function App() {
       alert(statusText);
     } catch (err: any) {
       alert("Error parsing and uploading sheets data: " + err.message);
+    }
+  };
+
+  const handleDeduplicateGallery = async () => {
+    try {
+      setCsvUploadStatus('🧹 Scanning cloud gallery for duplicate photo URLs/IDs...');
+      const snapshot = await getDocs(collection(db, 'gallery'));
+      const seenIds = new Set<string>();
+      const seenUrls = new Set<string>();
+      let deleteCount = 0;
+      let keepsCount = 0;
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        const photoUrl = (data.url || '').trim();
+        const isCustom = data.isCustom === true || docId.startsWith('sheet_');
+
+        if (seenIds.has(docId) || (photoUrl && seenUrls.has(photoUrl))) {
+          if (isCustom) {
+            await deleteDoc(doc(db, 'gallery', docId));
+            deleteCount++;
+          }
+        } else {
+          seenIds.add(docId);
+          if (photoUrl) {
+            seenUrls.add(photoUrl);
+          }
+          keepsCount++;
+        }
+      }
+
+      setCsvUploadStatus(`✅ Cleaned up ${deleteCount} duplicate images!`);
+      alert(`🧹 Deduplication Complete!\n\n• Removed: ${deleteCount} duplicates\n• Retained: ${keepsCount} master images.`);
+    } catch (err: any) {
+      alert("Error deduplicating photos: " + err.message);
+      setCsvUploadStatus('⚠️ Error occurred during cleanup');
+    }
+  };
+
+  const handleFactoryResetDatabase = async () => {
+    try {
+      if (!window.confirm("⚠️ WARNING: This will completely wipe all custom uploaded products, spreadsheet catalog items, and walkthrough videos, and re-seed the Warri showroom back to clean defaults.\n\nAre you sure you want to perform a factory reset?")) {
+        return;
+      }
+
+      setCsvUploadStatus('🔄 Wiping cloud products & gallery lists...');
+      
+      const prodSnapshot = await getDocs(collection(db, 'products'));
+      for (const d of prodSnapshot.docs) {
+        await deleteDoc(doc(db, 'products', d.id));
+      }
+
+      const gallSnapshot = await getDocs(collection(db, 'gallery'));
+      for (const d of gallSnapshot.docs) {
+        const data = d.data();
+        const isCustom = data.isCustom === true || d.id.startsWith('sheet_');
+        if (isCustom) {
+          await deleteDoc(doc(db, 'gallery', d.id));
+        }
+      }
+
+      const vidSnapshot = await getDocs(collection(db, 'videos'));
+      for (const d of vidSnapshot.docs) {
+        await deleteDoc(doc(db, 'videos', d.id));
+      }
+
+      localStorage.removeItem('ht_products');
+      localStorage.removeItem('ht_gallery_photos');
+      localStorage.removeItem('ht_videos');
+      localStorage.removeItem('ht_img_cache');
+      
+      setCsvUploadStatus('No Google Sheets CSV imported yet');
+      localStorage.removeItem('ht_csv_upload_status');
+
+      alert("🎉 Cloud reset complete! The system will now reload and re-seed clean default products & gallery assets.");
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error resetting databases: " + err.message);
+      setCsvUploadStatus('⚠️ Error occurred during reset');
     }
   };
 
@@ -1117,6 +1248,10 @@ export default function App() {
   const [createProductType, setCreateProductType] = useState<'standard' | 'solar'>('standard');
   const [newProductForm, setNewProductForm] = useState<Partial<Product>>({ pn: '', n: 'Unmade', cat: 'laptops', sp: '', price: 'CALL', desc: '', displayOrder: '' });
   const [newSolarForm, setNewSolarForm] = useState<Partial<SolarProduct>>({ id: '', cat: 'Inverters', n: '', brand: '', sp: '', price: '₦', desc: '' });
+
+  // Bulk selection states for inventory cleanup
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string | number>>(new Set());
+  const [selectedSolarIds, setSelectedSolarIds] = useState<Set<string>>(new Set());
 
   // Typewriter sequence
   useEffect(() => {
@@ -3270,122 +3405,194 @@ Message: ${quickMessageText}`;
                     ))}
                   </div>
 
-                  {galleryTab === 'manage_products' && isStaffLoggedIn ? (
-                    /* DIRECT INVENTORY MANAGEMENT TAB */
-                    <div className="space-y-4 text-left animate-fade-in">
-                      {/* TYPE SELECTOR TOGGLE */}
-                      <div className="flex bg-zinc-950 border border-zinc-900 rounded-lg p-1.5 gap-1 shadow-inner">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setManageInventoryType('standard');
-                            setProductCatFilter('All');
-                          }}
-                          className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
-                            manageInventoryType === 'standard'
-                              ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
-                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-                          }`}
-                        >
-                          📦 Standard Systems
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setManageInventoryType('solar');
-                            setProductCatFilter('All');
-                          }}
-                          className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
-                            manageInventoryType === 'solar'
-                              ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
-                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-                          }`}
-                        >
-                          ⚡ Solar Packages
-                        </button>
-                      </div>
+                  {galleryTab === 'manage_products' && isStaffLoggedIn ? (() => {
+                    const currentFilteredProducts = productsList.filter(p => {
+                      const matchesSearch = p.n.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+                        p.pn.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                        p.sp.toLowerCase().includes(productSearchTerm.toLowerCase());
+                      const matchesCat = productCatFilter === 'All' || p.cat === productCatFilter;
+                      return matchesSearch && matchesCat;
+                    });
 
-                      {/* QUICK CREATE BUTTON & FILTERS */}
-                      <div className="bg-[#141414] border border-[#212121] rounded-xl p-3 space-y-3">
-                        <div className="flex justify-between items-center gap-2">
-                          <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono tracking-wider">
-                            {manageInventoryType === 'standard' ? 'Standard Catalog' : 'Solar Catalog'}
-                          </span>
+                    const currentFilteredSolar = solarProductsList.filter(s => {
+                      const matchesSearch = s.n.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+                        s.brand.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                        s.id.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                        s.sp.toLowerCase().includes(productSearchTerm.toLowerCase());
+                      const matchesCat = productCatFilter === 'All' || s.cat === productCatFilter;
+                      return matchesSearch && matchesCat;
+                    });
+
+                    return (
+                      /* DIRECT INVENTORY MANAGEMENT TAB */
+                      <div className="space-y-4 text-left animate-fade-in">
+                        {/* TYPE SELECTOR TOGGLE */}
+                        <div className="flex bg-zinc-950 border border-zinc-900 rounded-lg p-1.5 gap-1 shadow-inner">
                           <button
                             type="button"
                             onClick={() => {
-                              if (manageInventoryType === 'standard') {
-                                setNewProductForm({
-                                  id: Date.now(),
-                                  pn: 'HT-' + String(Date.now()).slice(-4),
-                                  cat: 'laptops',
-                                  n: 'Unmade',
-                                  sp: 'System specification details pending customer confirmation',
-                                  price: 'CALL',
-                                  desc: 'Awaiting hardware specification sticker validation to populate model datasheet.'
-                                });
-                              } else {
-                                setNewSolarForm({
-                                  id: 'SOLAR-' + String(Date.now()).slice(-4),
-                                  cat: 'Inverters',
-                                  n: 'Unmade',
-                                  brand: 'Generic',
-                                  sp: 'Pure sine wave - specifications pending customer confirmation',
-                                  price: '₦',
-                                  desc: 'Awaiting model and capacity sticker details.'
-                                });
-                              }
-                              setCreateProductType(manageInventoryType);
-                              setShowCreateProductModal(true);
+                              setManageInventoryType('standard');
+                              setProductCatFilter('All');
                             }}
-                            className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-[#F5C518] text-[9px] font-mono font-bold px-2.5 py-1 rounded flex items-center gap-1 uppercase transition-colors"
+                            className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
+                              manageInventoryType === 'standard'
+                                ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
+                                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+                            }`}
                           >
-                            <Plus className="w-3.5 h-3.5" />
-                            Create Product Slot
+                            📦 Standard Systems
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManageInventoryType('solar');
+                              setProductCatFilter('All');
+                            }}
+                            className={`flex-1 py-1.5 text-center text-[10px] font-bold rounded-md transition-colors ${
+                              manageInventoryType === 'solar'
+                                ? 'bg-[#F5C518] text-[#0a0a0a] font-extrabold'
+                                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+                            }`}
+                          >
+                            ⚡ Solar Packages
                           </button>
                         </div>
 
-                        {/* SEARCH & FILTER GROUP */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="relative">
-                            <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-zinc-500" />
-                            <input
-                              type="text"
-                              placeholder="Search list..."
-                              value={productSearchTerm}
-                              onChange={e => setProductSearchTerm(e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-900 p-1.5 pl-7 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
-                            />
+                        {/* QUICK CREATE BUTTON & FILTERS */}
+                        <div className="bg-[#141414] border border-[#212121] rounded-xl p-3 space-y-3">
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono tracking-wider">
+                              {manageInventoryType === 'standard' ? 'Standard Catalog' : 'Solar Catalog'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (manageInventoryType === 'standard') {
+                                  setNewProductForm({
+                                    id: Date.now(),
+                                    pn: 'HT-' + String(Date.now()).slice(-4),
+                                    cat: 'laptops',
+                                    n: 'Unmade',
+                                    sp: 'System specification details pending customer confirmation',
+                                    price: 'CALL',
+                                    desc: 'Awaiting hardware specification sticker validation to populate model datasheet.'
+                                  });
+                                } else {
+                                  setNewSolarForm({
+                                    id: 'SOLAR-' + String(Date.now()).slice(-4),
+                                    cat: 'Inverters',
+                                    n: 'Unmade',
+                                    brand: 'Generic',
+                                    sp: 'Pure sine wave - specifications pending customer confirmation',
+                                    price: '₦',
+                                    desc: 'Awaiting model and capacity sticker details.'
+                                  });
+                                }
+                                setCreateProductType(manageInventoryType);
+                                setShowCreateProductModal(true);
+                              }}
+                              className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-[#F5C518] text-[9px] font-mono font-bold px-2.5 py-1 rounded flex items-center gap-1 uppercase transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Create Product Slot
+                            </button>
                           </div>
 
-                          <select
-                            value={productCatFilter}
-                            onChange={e => setProductCatFilter(e.target.value)}
-                            className="bg-zinc-950 border border-zinc-900 p-1.5 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
-                          >
-                            <option value="All">All Categories</option>
-                            {manageInventoryType === 'standard' ? (
-                              CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                            ) : (
-                              ['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))
-                            )}
-                          </select>
-                        </div>
-                      </div>
+                          {/* SEARCH & FILTER GROUP */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-zinc-500" />
+                              <input
+                                type="text"
+                                placeholder="Search list..."
+                                value={productSearchTerm}
+                                onChange={e => setProductSearchTerm(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-900 p-1.5 pl-7 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
+                              />
+                            </div>
 
-                      {/* INVENTORY LISTS */}
-                      <div className="space-y-3">
-                        {manageInventoryType === 'standard' ? (
-                          (() => {
-                            const filteredList = productsList.filter(p => {
-                              const matchesSearch = p.n.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
-                                p.pn.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
-                                p.sp.toLowerCase().includes(productSearchTerm.toLowerCase());
-                              const matchesCat = productCatFilter === 'All' || p.cat === productCatFilter;
-                              return matchesSearch && matchesCat;
-                            });
+                            <select
+                              value={productCatFilter}
+                              onChange={e => setProductCatFilter(e.target.value)}
+                              className="bg-zinc-950 border border-zinc-900 p-1.5 rounded text-[10px] text-zinc-200 outline-none focus:border-zinc-700 font-mono"
+                            >
+                              <option value="All">All Categories</option>
+                              {manageInventoryType === 'standard' ? (
+                                CATS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                              ) : (
+                                ['Inverters', 'Lithium Batteries', 'Tubular Battery', 'Solar Panels', 'Controllers', 'Cables', 'All-in-One'].map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+
+                          {/* BULK ACTIONS CONTROL PANEL */}
+                          <div className="pt-2.5 border-t border-zinc-900 flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="bulk-select-all-checkbox"
+                                checked={
+                                  manageInventoryType === 'standard'
+                                    ? currentFilteredProducts.length > 0 && currentFilteredProducts.every(p => selectedProductIds.has(p.id))
+                                    : currentFilteredSolar.length > 0 && currentFilteredSolar.every(s => selectedSolarIds.has(s.id))
+                                }
+                                onChange={(e) => {
+                                  if (manageInventoryType === 'standard') {
+                                    if (e.target.checked) {
+                                      setSelectedProductIds(new Set(currentFilteredProducts.map(p => p.id)));
+                                    } else {
+                                      setSelectedProductIds(new Set());
+                                    }
+                                  } else {
+                                    if (e.target.checked) {
+                                      setSelectedSolarIds(new Set(currentFilteredSolar.map(s => s.id)));
+                                    } else {
+                                      setSelectedSolarIds(new Set());
+                                    }
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-zinc-700 text-[#F5C518] focus:ring-[#F5C518] bg-zinc-950 cursor-pointer accent-[#F5C518]"
+                              />
+                              <label htmlFor="bulk-select-all-checkbox" className="text-[10px] font-mono text-zinc-400 font-black uppercase cursor-pointer select-none">
+                                Select All Shown ({manageInventoryType === 'standard' ? currentFilteredProducts.length : currentFilteredSolar.length})
+                              </label>
+                            </div>
+
+                            {(manageInventoryType === 'standard' ? selectedProductIds.size > 0 : selectedSolarIds.size > 0) && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const selectedCount = manageInventoryType === 'standard' ? selectedProductIds.size : selectedSolarIds.size;
+                                  if (window.confirm(`⚠️ Bulk Deletion Warning!\n\nAre you sure you want to permanently delete the ${selectedCount} selected product(s) from the showroom catalog?\nThis will remove them from the Firestore database and cannot be undone.`)) {
+                                    if (manageInventoryType === 'standard') {
+                                      const ids = Array.from(selectedProductIds) as (string | number)[];
+                                      await handleBulkDeleteProducts(ids);
+                                      setSelectedProductIds(new Set());
+                                      alert(`🗑️ Successfully deleted ${selectedCount} standard products.`);
+                                    } else {
+                                      const ids = Array.from(selectedSolarIds) as string[];
+                                      await handleBulkDeleteSolarProducts(ids);
+                                      setSelectedSolarIds(new Set());
+                                      alert(`🗑️ Successfully deleted ${selectedCount} solar products.`);
+                                    }
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 bg-red-950/40 hover:bg-red-950/80 border border-red-900/40 text-red-300 text-[9px] uppercase font-mono px-3 py-1.5 rounded-lg font-bold transition-all shadow-md active:scale-[0.98]"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                <span>Delete Selected ({manageInventoryType === 'standard' ? selectedProductIds.size : selectedSolarIds.size})</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* INVENTORY LISTS */}
+                        <div className="space-y-3">
+                          {manageInventoryType === 'standard' ? (
+                            (() => {
+                              const filteredList = currentFilteredProducts;
 
                             if (filteredList.length === 0) {
                               return (
@@ -3409,6 +3616,24 @@ Message: ${quickMessageText}`;
                                   )}
 
                                   <div className="flex gap-2.5 items-start">
+                                    {/* BULK SELECT CHECKBOX */}
+                                    <div className="flex items-center self-center pr-1 h-14">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedProductIds.has(item.id)}
+                                        onChange={(e) => {
+                                          const next = new Set(selectedProductIds);
+                                          if (e.target.checked) {
+                                            next.add(item.id);
+                                          } else {
+                                            next.delete(item.id);
+                                          }
+                                          setSelectedProductIds(next);
+                                        }}
+                                        className="w-4 h-4 rounded border-zinc-700 text-[#F5C518] focus:ring-[#F5C518] bg-zinc-950 cursor-pointer accent-[#F5C518] shrink-0"
+                                      />
+                                    </div>
+
                                     {/* PHOTO STATE / Direct Image Drag/Select Upload box */}
                                     <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
                                       {boundPhoto ? (
@@ -3601,6 +3826,24 @@ Message: ${quickMessageText}`;
                               return (
                                 <div key={item.id} className="bg-[#121212] border border-[#212121] rounded-xl p-3 space-y-2 relative hover:border-zinc-700 transition" id={`solar-${item.id}`}>
                                   <div className="flex gap-2.5 items-start">
+                                    {/* BULK SELECT CHECKBOX */}
+                                    <div className="flex items-center self-center pr-1 h-14">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedSolarIds.has(item.id)}
+                                        onChange={(e) => {
+                                          const next = new Set(selectedSolarIds);
+                                          if (e.target.checked) {
+                                            next.add(item.id);
+                                          } else {
+                                            next.delete(item.id);
+                                          }
+                                          setSelectedSolarIds(next);
+                                        }}
+                                        className="w-4 h-4 rounded border-zinc-700 text-[#F5C518] focus:ring-[#F5C518] bg-zinc-950 cursor-pointer accent-[#F5C518] shrink-0"
+                                      />
+                                    </div>
+
                                     {/* PHOTO STATE / Direct Image Drag/Select Upload box */}
                                     <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
                                       {boundPhoto ? (
@@ -3761,7 +4004,8 @@ Message: ${quickMessageText}`;
                         )}
                       </div>
                     </div>
-                  ) : (
+                    );
+                  })() : (
                     /* REGULAR PHOTOS COLLAGE GRID VIEW */
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 gap-4">
@@ -4777,28 +5021,36 @@ Message: ${quickMessageText}`;
                   </div>
 
                   {csvUploadStatus && (
-                    <div className="bg-black/60 border border-zinc-900 rounded-lg p-2.5 flex items-center gap-2 justify-between animate-fade-in">
-                      <div className="flex items-center gap-2 text-xs font-mono text-zinc-300 font-bold">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>{csvUploadStatus}</span>
+                    <div className="bg-black/60 border border-zinc-900 rounded-lg p-3 flex flex-col md:flex-row md:items-center gap-3 justify-between animate-fade-in text-left">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs font-mono text-[#F5C518] font-extrabold">
+                          <span className="w-2 h-2 rounded-full bg-[#F5C518] animate-pulse"></span>
+                          <span>ACTIVE STATUS: {csvUploadStatus}</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-zinc-500">
+                          📊 Showroom Storage: <span className="text-zinc-200">{productsList.length}</span> products · <span className="text-[#F5C518]">{galleryPhotos.length}</span> gallery assets · <span className="text-zinc-200">{galleryVideos.length}</span> walkthrough videos
+                        </div>
                       </div>
-                      <button 
-                        id="clear-sheets-cache-btn"
-                        onClick={() => {
-                          if (window.confirm("Restore factory default catalogue? This will clear temporary Google Sheets imports.")) {
-                            setCsvUploadStatus('No Google Sheets CSV imported yet');
-                            localStorage.removeItem('ht_csv_upload_status');
-                            // Let the system reload standard values
-                            localStorage.removeItem('ht_products');
-                            localStorage.removeItem('ht_gallery_photos');
-                            localStorage.removeItem('ht_videos');
-                            window.location.reload();
-                          }
-                        }}
-                        className="text-zinc-500 hover:text-zinc-300 text-[9px] uppercase font-mono px-2 py-1 rounded border border-zinc-900 hover:border-zinc-800 transition"
-                      >
-                        Reset Catalogue
-                      </button>
+                      
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <button 
+                          id="deduplicate-sheets-btn"
+                          onClick={handleDeduplicateGallery}
+                          className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 hover:border-zinc-650 text-[10px] uppercase font-mono px-3 py-1.5 rounded-lg font-bold transition-all shadow active:scale-[0.98]"
+                          title="Remove redundant duplicate images from the showroom Firestore collection"
+                        >
+                          <span>🧹 Deduplicate DB</span>
+                        </button>
+
+                        <button 
+                          id="clear-sheets-cache-btn"
+                          onClick={handleFactoryResetDatabase}
+                          className="flex items-center gap-1.5 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/40 hover:border-red-700 transition duration-155 text-[10px] uppercase font-mono px-3 py-1.5 rounded-lg font-bold transition-all shadow active:scale-[0.98]"
+                          title="Perform a clean cloud restore back to initial factory showroom defaults"
+                        >
+                          <span>🔄 Factory Reset</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -4901,7 +5153,7 @@ Message: ${quickMessageText}`;
                     {(() => {
                       const activeParts = displayFloorActiveLayout.split(',').map(s => s.trim()).filter(Boolean);
                       const missingParts = activeParts.filter(partCode => {
-                        const match = productsList.find(p => p.displayOrder === partCode);
+                        const match = productsList.find(p => p.displayOrder === partCode || (!p.displayOrder && String(p.id) === partCode));
                         return !match;
                       });
                       if (missingParts.length > 0) {
@@ -4935,7 +5187,7 @@ Message: ${quickMessageText}`;
                     let matchingItems: Product[] = [];
                     if (seqList.length > 0) {
                       matchingItems = seqList.map(code => {
-                        return productsList.find(p => p.displayOrder === code);
+                        return productsList.find(p => p.displayOrder === code || (!p.displayOrder && String(p.id) === code));
                       }).filter(Boolean) as Product[];
                     } else {
                         // show all products if no selection mapped, or leave empty
