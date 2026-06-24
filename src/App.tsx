@@ -28,7 +28,7 @@ import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsS
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { compressImage } from './lib/imageCompressor';
-import { uploadImageToCDNOrLocal } from './lib/cloudinaryService';
+import { uploadFile } from './lib/uploadService';
 import * as XLSX from 'xlsx';
 
 export interface CompactProductCardProps {
@@ -577,12 +577,12 @@ export default function App() {
         }
 
         try {
-          const videoUrl = await uploadImageToCDNOrLocal(file.name, videoBase64, cloudinaryConfig);
+          const videoUrl = await uploadFile(file.name, videoBase64);
 
           let thumbnailUrl = '';
           if (thumbnailBase64) {
             setUploadVideoProgress("Registering custom snapshot poster banner...");
-            thumbnailUrl = await uploadImageToCDNOrLocal(`thumb_${Date.now()}.jpg`, thumbnailBase64, cloudinaryConfig);
+            thumbnailUrl = await uploadFile(`thumb_${Date.now()}.jpg`, thumbnailBase64);
           }
 
           const payload = {
@@ -864,17 +864,6 @@ export default function App() {
     } catch {
       return [];
     }
-  });
-
-  const [cloudinaryConfig, setCloudinaryConfig] = useState<{ cloudName: string; uploadPreset: string }>(() => {
-    try {
-      const saved = localStorage.getItem('ht_cloudinary_config');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
-      cloudName: (import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME || '',
-      uploadPreset: (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
-    };
   });
 
   const [galleryVideos, setGalleryVideos] = useState<any[]>(() => {
@@ -2223,13 +2212,6 @@ export default function App() {
         } else if (id === 'contacts') {
           setContacts(data);
           localStorage.setItem('ht_contacts', JSON.stringify(data));
-        } else if (id === 'cloudinary') {
-          const configVal = {
-            cloudName: data.cloudName || '',
-            uploadPreset: data.uploadPreset || ''
-          };
-          setCloudinaryConfig(configVal);
-          localStorage.setItem('ht_cloudinary_config', JSON.stringify(configVal));
         }
       });
     }, (error) => {
@@ -2529,16 +2511,6 @@ export default function App() {
       await setDoc(doc(db, 'app_config', 'contacts'), newContacts);
     } catch (err) {
       console.warn("Contacts configurations cloud update offline fallback: ", err);
-    }
-  };
-
-  const handleUpdateCloudinaryConfig = async (config: { cloudName: string; uploadPreset: string }) => {
-    setCloudinaryConfig(config);
-    localStorage.setItem('ht_cloudinary_config', JSON.stringify(config));
-    try {
-      await setDoc(doc(db, 'app_config', 'cloudinary'), config);
-    } catch (err) {
-      console.warn("Cloudinary configuration cloud update offline fallback: ", err);
     }
   };
 
@@ -3828,7 +3800,7 @@ Message: ${quickMessageText}`;
                     // Compress image client-side to make it lightweight
                     const compressedBase64 = await compressImage(dataUrl);
 
-                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                    const finalUrl = await uploadFile(file.name, compressedBase64);
 
                     const newPhoto = {
                       id: 'gal_' + Date.now(),
@@ -4280,7 +4252,7 @@ Message: ${quickMessageText}`;
                                                   }
                                                   try {
                                                     const compressedBase64 = await compressImage(dataUrl);
-                                                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                    const finalUrl = await uploadFile(file.name, compressedBase64);
                                                     const nextPhotos = galleryPhotos.map(p => {
                                                       if (p.productCode === item.pn) {
                                                         return { ...p, url: finalUrl, fallbackUrl: compressedBase64 };
@@ -4290,17 +4262,21 @@ Message: ${quickMessageText}`;
                                                     saveGalleryPhotosToStorage(nextPhotos);
                                                     handleUpdateImageCache(item.id.toString(), finalUrl);
                                                     alert("📷 Image changed & successfully synced!");
-                                                  } catch {
-                                                    const compressedFallback = await compressImage(dataUrl);
-                                                    const nextPhotos = galleryPhotos.map(p => {
-                                                      if (p.productCode === item.pn) {
-                                                        return { ...p, url: compressedFallback, fallbackUrl: compressedFallback };
-                                                      }
-                                                      return p;
-                                                    });
-                                                    saveGalleryPhotosToStorage(nextPhotos);
-                                                    handleUpdateImageCache(item.id.toString(), compressedFallback);
-                                                    alert("📷 Image saved (local cache fallback)!");
+                                                  } catch (uploadErr: any) {
+                                                    if (uploadErr && uploadErr.message && uploadErr.message.includes("Cloudinary Permission Error")) {
+                                                      alert(uploadErr.message);
+                                                    } else {
+                                                      const compressedFallback = await compressImage(dataUrl);
+                                                      const nextPhotos = galleryPhotos.map(p => {
+                                                        if (p.productCode === item.pn) {
+                                                          return { ...p, url: compressedFallback, fallbackUrl: compressedFallback };
+                                                        }
+                                                        return p;
+                                                      });
+                                                      saveGalleryPhotosToStorage(nextPhotos);
+                                                      handleUpdateImageCache(item.id.toString(), compressedFallback);
+                                                      alert("📷 Image saved (local cache fallback)!");
+                                                    }
                                                   } finally {
                                                     if (item.pn) {
                                                       setPendingUploads(prev => {
@@ -4334,7 +4310,7 @@ Message: ${quickMessageText}`;
                                                 }
                                                 try {
                                                   const compressedBase64 = await compressImage(dataUrl);
-                                                  const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                  const finalUrl = await uploadFile(file.name, compressedBase64);
                                                   const newPhoto = {
                                                     id: 'gal_' + Date.now(),
                                                     url: finalUrl,
@@ -4512,7 +4488,7 @@ Message: ${quickMessageText}`;
                                                   }
                                                   try {
                                                     const compressedBase64 = await compressImage(dataUrl);
-                                                    const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                    const finalUrl = await uploadFile(file.name, compressedBase64);
                                                     const nextPhotos = galleryPhotos.map(p => {
                                                       if (p.productCode === item.id) {
                                                         return { ...p, url: finalUrl, fallbackUrl: compressedBase64 };
@@ -4566,7 +4542,7 @@ Message: ${quickMessageText}`;
                                                 }
                                                 try {
                                                   const compressedBase64 = await compressImage(dataUrl);
-                                                  const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+                                                  const finalUrl = await uploadFile(file.name, compressedBase64);
                                                   const newPhoto = {
                                                     id: 'gal_' + Date.now(),
                                                     url: finalUrl,
@@ -4983,7 +4959,7 @@ Message: ${quickMessageText}`;
                                         try {
                                           const dataUrl = reader.result as string;
                                           const compressed = await compressImage(dataUrl);
-                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          const finalUrl = await uploadFile(file.name, compressed);
                                           setEditingProduct({ ...editingProduct, imageUrl: finalUrl });
                                           alert("📷 Photo uploaded!");
                                         } catch (innerErr: any) {
@@ -5144,7 +5120,7 @@ Message: ${quickMessageText}`;
                                         try {
                                           const dataUrl = reader.result as string;
                                           const compressed = await compressImage(dataUrl);
-                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          const finalUrl = await uploadFile(file.name, compressed);
                                           setEditingSolar({ ...editingSolar, imageUrl: finalUrl });
                                           alert("📷 Photo uploaded!");
                                         } catch (innerErr: any) {
@@ -5308,7 +5284,7 @@ Message: ${quickMessageText}`;
                                         try {
                                           const dataUrl = reader.result as string;
                                           const compressed = await compressImage(dataUrl);
-                                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                                          const finalUrl = await uploadFile(file.name, compressed);
                                           setEditingGallery({ ...editingGallery, url: finalUrl, fallbackUrl: compressed });
                                           alert("📷 Photo uploaded!");
                                         } catch (innerErr: any) {
@@ -7640,8 +7616,6 @@ Message: ${quickMessageText}`;
                 onRemoveVideo={handleRemoveVideo}
                 galleryPhotos={galleryPhotos}
                 onUpdateGalleryPhotos={saveGalleryPhotosToStorage}
-                cloudinaryConfig={cloudinaryConfig}
-                onUpdateCloudinaryConfig={handleUpdateCloudinaryConfig}
               />
             )}
 
@@ -8458,12 +8432,13 @@ Message: ${quickMessageText}`;
           if (typeof p.id === 'string') {
             const updated = { ...p, imageUrl: finalUrl } as SolarProduct;
             await handleSaveSolarProduct(updated);
+            setSelectedProduct(updated);
           } else {
             const updated = { ...p, imageUrl: finalUrl } as Product;
             await handleSaveProduct(updated);
+            setSelectedProduct(updated);
           }
         }}
-        cloudinaryConfig={cloudinaryConfig}
       />
 
       {/* DOCUMENT PREVIEW OVERLAY MODAL */}

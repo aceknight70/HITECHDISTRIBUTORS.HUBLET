@@ -24,7 +24,7 @@ import {
 import { User } from 'firebase/auth';
 import { parsePdfFile, runPdfAutoMatcher } from '../lib/pdfParserService';
 import { compressImage } from '../lib/imageCompressor';
-import { uploadImageToCDNOrLocal } from '../lib/cloudinaryService';
+import { uploadFile } from '../lib/uploadService';
 import { db } from '../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -74,8 +74,6 @@ interface StaffRoomProps {
   onUpdateLiveEmbedUrl: (url: string) => void;
   galleryPhotos: any[];
   onUpdateGalleryPhotos: (photos: any[]) => void;
-  cloudinaryConfig?: { cloudName: string; uploadPreset: string };
-  onUpdateCloudinaryConfig?: (config: { cloudName: string; uploadPreset: string }) => void;
 }
 
 export default function StaffRoom({
@@ -109,9 +107,7 @@ export default function StaffRoom({
   liveEmbedUrl,
   onUpdateLiveEmbedUrl,
   galleryPhotos = [],
-  onUpdateGalleryPhotos,
-  cloudinaryConfig = { cloudName: '', uploadPreset: '' },
-  onUpdateCloudinaryConfig
+  onUpdateGalleryPhotos
 }: StaffRoomProps) {
   const [pin, setPin] = useState('');
   const [loggedIn, setLoggedIn] = useState(() => {
@@ -346,7 +342,7 @@ export default function StaffRoom({
             // Compress image client-side to make it lightweight
             const compressedBase64 = await compressImage(rawDataUrl);
 
-            const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
+            const finalUrl = await uploadFile(file.name, compressedBase64);
             
             const newPhoto = {
               id: 'gal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -674,18 +670,6 @@ export default function StaffRoom({
   // Manager reject notes
   const [gmRejectNotes, setGmRejectNotes] = useState<{ [id: string]: string }>({});
 
-  // Cloudinary settings local states
-  const [cloudNameInput, setCloudNameInput] = useState(cloudinaryConfig?.cloudName || '');
-  const [uploadPresetInput, setUploadPresetInput] = useState(cloudinaryConfig?.uploadPreset || '');
-  const [isCloudinarySaving, setIsCloudinarySaving] = useState(false);
-
-  useEffect(() => {
-    if (cloudinaryConfig) {
-      setCloudNameInput(cloudinaryConfig.cloudName || '');
-      setUploadPresetInput(cloudinaryConfig.uploadPreset || '');
-    }
-  }, [cloudinaryConfig]);
-
   const startDynamicClientZipDownload = async () => {
     setIsZipping(true);
     setZipProgress('Initializing ZIP encoder...');
@@ -863,7 +847,7 @@ export default function StaffRoom({
       const dataUrl = reader.result as string;
       try {
         const compressedDataUrl = await compressImage(dataUrl);
-        const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
+        const finalUrl = await uploadFile(file.name, compressedDataUrl);
         setNewImageUrl(finalUrl);
       } catch (err) {
         console.error("Staff room photo saving fell back to local memory base64:", err);
@@ -1939,7 +1923,7 @@ export default function StaffRoom({
                                             const dataUrl = reader.result as string;
                                             try {
                                               const compressedDataUrl = await compressImage(dataUrl);
-                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
+                                              const finalUrl = await uploadFile(file.name, compressedDataUrl);
                                               setEditingProdForm(prev => ({ ...prev, imageUrl: finalUrl }));
                                             } catch (err) {
                                               setEditingProdForm(prev => ({ ...prev, imageUrl: dataUrl }));
@@ -2159,7 +2143,7 @@ export default function StaffRoom({
                                             const dataUrl = reader.result as string;
                                             try {
                                               const compressedDataUrl = await compressImage(dataUrl);
-                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
+                                              const finalUrl = await uploadFile(file.name, compressedDataUrl);
                                               setEditingSolarForm(prev => ({ ...prev, imageUrl: finalUrl }));
                                             } catch (err) {
                                               setEditingSolarForm(prev => ({ ...prev, imageUrl: dataUrl }));
@@ -3815,67 +3799,6 @@ export default function StaffRoom({
                         ) : (
                           'Download (.zip)'
                         )}
-                      </button>
-                    </div>
-
-                    <div className="bg-[#0e0e0e] p-2.5 border border-zinc-900 rounded-lg space-y-1 flex flex-col justify-between">
-                      <div>
-                        <div className="text-[9px] font-mono font-black text-cyan-400 uppercase">
-                          ⚡ OPTION C: Cloudinary CDN
-                        </div>
-                        <p className="text-[8px] text-zinc-500 font-bold uppercase leading-normal">
-                          Store newly uploaded product photos on your personal Cloudinary cloud directly. This bypasses Git pushes and prevents Netlify 404 images!
-                        </p>
-
-                        <div className="mt-2.5 space-y-1.5">
-                          <div>
-                            <span className="text-[7.5px] font-mono uppercase text-zinc-500 font-black tracking-wider block">Cloud Name</span>
-                            <input 
-                              type="text" 
-                              placeholder="e.g. hitechdist" 
-                              value={cloudNameInput}
-                              onChange={(e) => setCloudNameInput(e.target.value)}
-                              className="w-full text-[9px] bg-zinc-950 border border-zinc-900 px-2 py-1 text-zinc-300 rounded font-mono focus:border-cyan-500/50 outline-none"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[7.5px] font-mono uppercase text-zinc-500 font-black tracking-wider block">Upload Preset</span>
-                            <input 
-                              type="text" 
-                              placeholder="e.g. ml_default" 
-                              value={uploadPresetInput}
-                              onChange={(e) => setUploadPresetInput(e.target.value)}
-                              className="w-full text-[9px] bg-zinc-950 border border-zinc-900 px-2 py-1 text-[#f5c518] rounded font-mono focus:border-cyan-500/50 outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={async () => {
-                          if (!cloudNameInput.trim() || !uploadPresetInput.trim()) {
-                            alert("Please fill out both Cloud Name and Upload Preset to connect Cloudinary!");
-                            return;
-                          }
-                          setIsCloudinarySaving(true);
-                          try {
-                            if (onUpdateCloudinaryConfig) {
-                              await onUpdateCloudinaryConfig({
-                                cloudName: cloudNameInput.trim(),
-                                uploadPreset: uploadPresetInput.trim()
-                              });
-                              alert("⚡ Cloudinary Cloud CDN linked successfully and synchronized dynamically in Firestore!");
-                            }
-                          } catch (err) {
-                            alert("Failed to save Cloudinary configuration. Please verify credentials.");
-                          } finally {
-                            setIsCloudinarySaving(false);
-                          }
-                        }}
-                        disabled={isCloudinarySaving}
-                        className="mt-2.5 w-full py-1.5 active:scale-95 text-[#0a0a0a] text-[9px] font-mono font-black uppercase rounded-md transition bg-cyan-400 hover:bg-cyan-500"
-                      >
-                        {isCloudinarySaving ? 'Linking...' : (cloudinaryConfig?.cloudName ? 'Update CDN' : 'Link CDN')}
                       </button>
                     </div>
 

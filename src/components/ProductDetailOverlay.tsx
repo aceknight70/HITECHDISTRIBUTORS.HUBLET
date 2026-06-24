@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ShoppingCart, MessageSquare, Image, Cpu, Check, Upload, Trash2 } from 'lucide-react';
 import { Product, SolarProduct } from '../types';
 import { compressImage } from '../lib/imageCompressor';
-import { uploadImageToCDNOrLocal } from '../lib/cloudinaryService';
+import { uploadFile } from '../lib/uploadService';
 
 interface ProductDetailOverlayProps {
   product: Product | SolarProduct | null;
@@ -21,7 +21,6 @@ interface ProductDetailOverlayProps {
   onEdit?: (product: Product | SolarProduct) => void;
   onDelete?: (product: Product | SolarProduct) => void;
   onChangePhoto?: (product: Product | SolarProduct, imageUrl: string) => void;
-  cloudinaryConfig?: { cloudName: string; uploadPreset: string };
 }
 
 export function getDefaultProductImage(product: Product | SolarProduct): string {
@@ -87,8 +86,7 @@ export default function ProductDetailOverlay({
   isStaffLoggedIn = false,
   onEdit,
   onDelete,
-  onChangePhoto,
-  cloudinaryConfig
+  onChangePhoto
 }: ProductDetailOverlayProps) {
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -288,7 +286,7 @@ export default function ProductDetailOverlay({
                         try {
                           const dataUrl = reader.result as string;
                           const compressed = await compressImage(dataUrl);
-                          const finalUrl = await uploadImageToCDNOrLocal(file.name, compressed, cloudinaryConfig);
+                          const finalUrl = await uploadFile(file.name, compressed);
                           if (onChangePhoto) {
                             await onChangePhoto(product, finalUrl);
                           }
