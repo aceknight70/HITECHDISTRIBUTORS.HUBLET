@@ -1910,6 +1910,42 @@ export default function StaffRoom({
                                   onChange={e => setEditingProdForm({ ...editingProdForm, desc: e.target.value })}
                                 />
                               </div>
+                              <div className="md:col-span-2">
+                                <label className="text-[8.5px] text-zinc-400 uppercase font-bold block mb-0.5">Product Image (Cloudinary CDN or Local URL)</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    className="flex-1 bg-black border border-zinc-700 text-zinc-300 p-1.5 rounded text-[11px] focus:outline-none focus:border-[#F5C518]"
+                                    value={editingProdForm.imageUrl || ''}
+                                    onChange={e => setEditingProdForm({ ...editingProdForm, imageUrl: e.target.value })}
+                                    placeholder="https://example.com/image.jpg"
+                                  />
+                                  <label className="cursor-pointer bg-zinc-900 border border-zinc-700 text-zinc-350 text-[9px] font-bold uppercase px-2 py-1.5 rounded flex items-center justify-center shrink-0 hover:text-white">
+                                    Upload Photo
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onloadend = async () => {
+                                            const dataUrl = reader.result as string;
+                                            try {
+                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+                                              setEditingProdForm(prev => ({ ...prev, imageUrl: finalUrl }));
+                                            } catch (err) {
+                                              setEditingProdForm(prev => ({ ...prev, imageUrl: dataUrl }));
+                                            }
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
                               
                               <div className="flex gap-4 md:col-span-2 items-center py-1">
                                 <label className="flex items-center gap-1.5 text-[9.5px] font-bold text-zinc-300 uppercase cursor-pointer">
@@ -2092,6 +2128,42 @@ export default function StaffRoom({
                                   value={editingSolarForm.desc || ''}
                                   onChange={e => setEditingSolarForm({ ...editingSolarForm, desc: e.target.value })}
                                 />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="text-[8.5px] text-zinc-400 uppercase font-bold block mb-0.5">Product Image (Cloudinary CDN or Local URL)</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    className="flex-1 bg-black border border-zinc-700 text-zinc-300 p-1.5 rounded text-[11px] focus:outline-none focus:border-[#F5C518]"
+                                    value={editingSolarForm.imageUrl || ''}
+                                    onChange={e => setEditingSolarForm({ ...editingSolarForm, imageUrl: e.target.value })}
+                                    placeholder="https://example.com/image.jpg"
+                                  />
+                                  <label className="cursor-pointer bg-zinc-900 border border-zinc-700 text-zinc-350 text-[9px] font-bold uppercase px-2 py-1.5 rounded flex items-center justify-center shrink-0 hover:text-white">
+                                    Upload Photo
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onloadend = async () => {
+                                            const dataUrl = reader.result as string;
+                                            try {
+                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+                                              setEditingSolarForm(prev => ({ ...prev, imageUrl: finalUrl }));
+                                            } catch (err) {
+                                              setEditingSolarForm(prev => ({ ...prev, imageUrl: dataUrl }));
+                                            }
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
                               </div>
                             </div>
 
