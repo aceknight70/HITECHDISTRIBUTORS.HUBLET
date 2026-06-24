@@ -19,6 +19,7 @@ export interface ImageMapping {
 export interface MatchDiff {
   photoId: string;
   url: string;
+  fallbackUrl?: string;
   label: string;
   originalCode: string;
   matchedCode: string;
@@ -179,6 +180,7 @@ export function runPdfAutoMatcher(
       diffs.push({
         photoId,
         url: photoUrl,
+        fallbackUrl: photo.fallbackUrl || '',
         label: finalLabel,
         originalCode,
         matchedCode: finalCode,

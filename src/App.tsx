@@ -65,23 +65,23 @@ export function CompactProductCard({
   const priceText = isDeal ? prod.salePrice : prod.price;
 
   // Resolve 5 views
-  const code = prod.pn || prod.id;
+  const code = String(prod.pn || prod.id);
   
   // 1. Front View URL
   const frontItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_front_${code}`);
-  const frontUrl = frontItem?.url || null;
+  const frontUrl = frontItem?.url || frontItem?.fallbackUrl || null;
   
   // 2. Side View URL
   const sideItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_side_${code}`);
-  const sideUrl = sideItem?.url || null;
+  const sideUrl = sideItem?.url || sideItem?.fallbackUrl || null;
   
   // 3. Back View URL
   const backItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_back_${code}`);
-  const backUrl = backItem?.url || null;
+  const backUrl = backItem?.url || backItem?.fallbackUrl || null;
   
   // 4. Top View URL
   const topItem = galleryPhotos.find(p => p.productCode === code && p.id === `sheet_top_${code}`);
-  const topUrl = topItem?.url || null;
+  const topUrl = topItem?.url || topItem?.fallbackUrl || null;
 
   // 5. Manual Upload URL
   const manualItem = galleryPhotos.find(p => p.productCode === code && !p.id.startsWith('sheet_'));
@@ -1056,7 +1056,8 @@ export default function App() {
         sub: photo.sub || '',
         productCode: photo.productCode || '',
         price: photo.price || '',
-        isCustom: !!photo.isCustom
+        isCustom: !!photo.isCustom,
+        fallbackUrl: photo.fallbackUrl || ''
       }));
     } catch {
       return GALLERY_PHOTOS.map((photo: any) => ({
@@ -1066,7 +1067,8 @@ export default function App() {
         sub: photo.sub || '',
         productCode: photo.productCode || '',
         price: photo.price || '',
-        isCustom: !!photo.isCustom
+        isCustom: !!photo.isCustom,
+        fallbackUrl: photo.fallbackUrl || ''
       }));
     }
   });
@@ -3628,10 +3630,10 @@ Message: ${quickMessageText}`;
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
                       {productsList.filter(p => p.cat === activeCategory).map(prod => {
-                        const bPhoto = galleryPhotos.find(gp => gp.productCode === prod.pn);
+                        const bPhoto = galleryPhotos.find(gp => gp.productCode === prod.pn || (prod.id && gp.productCode === String(prod.id)));
                         const itemWithImage = {
                           ...prod,
-                          imageUrl: bPhoto ? bPhoto.url : prod.imageUrl
+                          imageUrl: bPhoto ? (bPhoto.url || bPhoto.fallbackUrl) : prod.imageUrl
                         };
                         return renderCompactProductCard(
                           itemWithImage,
@@ -4262,7 +4264,7 @@ Message: ${quickMessageText}`;
                                     <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
                                       {boundPhoto ? (
                                         <>
-                                          <img src={boundPhoto.url} alt="" className="w-full h-full object-cover" />
+                                          <img src={boundPhoto.url || boundPhoto.fallbackUrl} alt="" className="w-full h-full object-cover" />
                                           <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
                                             <input 
                                               type="file" 
@@ -4494,7 +4496,7 @@ Message: ${quickMessageText}`;
                                     <div className="relative w-14 h-14 bg-zinc-950 border border-zinc-850 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
                                       {boundPhoto ? (
                                         <>
-                                          <img src={boundPhoto.url} alt="" className="w-full h-full object-cover" />
+                                          <img src={boundPhoto.url || boundPhoto.fallbackUrl} alt="" className="w-full h-full object-cover" />
                                           <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
                                             <input 
                                               type="file" 
@@ -5965,10 +5967,10 @@ Message: ${quickMessageText}`;
                         <p className="text-[10px] text-zinc-500 font-mono mb-2 uppercase">{matchingItems.length} products shown</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
                           {matchingItems.map(item => {
-                            const bPhoto = galleryPhotos.find(gp => gp.productCode === item.pn);
+                            const bPhoto = galleryPhotos.find(gp => gp.productCode === item.pn || (item.id && gp.productCode === String(item.id)));
                             const itemWithImage = {
                               ...item,
-                              imageUrl: bPhoto ? bPhoto.url : item.imageUrl
+                              imageUrl: bPhoto ? (bPhoto.url || bPhoto.fallbackUrl) : item.imageUrl
                             };
                             return renderCompactProductCard(
                               itemWithImage,
