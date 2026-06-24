@@ -267,13 +267,7 @@ export default function ProductDetailOverlay({
               </div>
             )}
 
-            {/* Upload spinner layer */}
-            {isUploading && (
-              <div className="absolute inset-0 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20">
-                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-[9px] font-mono text-amber-400 font-extrabold uppercase tracking-widest animate-pulse">Synchronizing...</span>
-              </div>
-            )}
+            {/* Upload spinner layer removed here as it was moved below */}
 
             {/* Direct photo upload trigger for logged-in staff */}
             {isStaffLoggedIn && !isUploading && (
@@ -300,21 +294,34 @@ export default function ProductDetailOverlay({
                           }
                           onUpdateImageCache(product.id.toString(), finalUrl);
                           setLocalImageUrl(finalUrl);
-                          alert("📷 Product showroom photo synced successfully!");
+                          alert("✅ Image uploaded successfully!");
                         } catch (innerErr: any) {
-                          alert("Upload failed: " + innerErr.message);
+                          alert("❌ Upload failed: " + innerErr.message);
                         } finally {
                           setIsUploading(false);
                         }
                       };
                       reader.readAsDataURL(file);
                     } catch (err: any) {
-                      alert("Failure initiating uploader: " + err.message);
+                      alert("❌ Upload failed: " + err.message);
                       setIsUploading(false);
                     }
                   }}
                 />
               </label>
+            )}
+
+            {/* Upload spinner layer */}
+            {isUploading && (
+              <div className="absolute inset-0 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center gap-3 z-20 rounded-lg">
+                <div className="w-8 h-8 border-4 border-[#F5C518] border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(245,197,24,0.5)]"></div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[10px] font-mono text-[#F5C518] font-black uppercase tracking-widest animate-pulse">Uploading Image...</span>
+                  <div className="w-24 h-1 bg-zinc-800 rounded-full overflow-hidden mt-1">
+                    <div className="w-full h-full bg-[#F5C518] rounded-full animate-progress"></div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 

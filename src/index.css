@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@theme {
+  --animate-progress: progress 1.5s ease-in-out infinite;
+
+  @keyframes progress {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+  }
+}
+
 html, body {
   margin: 0 !important;
   padding: 0 !important;

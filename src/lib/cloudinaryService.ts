@@ -51,10 +51,15 @@ export async function uploadImageToCDNOrLocal(
       const cleanSafeBase = safeBase.replace(/[^a-zA-Z0-9_\-]/g, '_');
       formData.append('public_id', `hitech_${Date.now()}_${cleanSafeBase}`);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
       const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -75,11 +80,15 @@ export async function uploadImageToCDNOrLocal(
   // Local static server /api/upload fallback
   console.log(`[Upload Fallback] Uploading ${filename} to local container server...`);
   try {
+    const localController = new AbortController();
+    const localTimeoutId = setTimeout(() => localController.abort(), 8000); // 8 second timeout
     const uploadRes = await fetch('/api/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, base64Data })
+      body: JSON.stringify({ filename, base64Data }),
+      signal: localController.signal
     });
+    clearTimeout(localTimeoutId);
 
     if (uploadRes.ok) {
       const uploadData = await uploadRes.json();
