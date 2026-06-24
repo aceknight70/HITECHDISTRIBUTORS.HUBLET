@@ -38,6 +38,7 @@ export interface CompactProductCardProps {
   onView: () => void;
   badgeText?: string;
   galleryPhotos: any[];
+  pendingUploads?: { [productCode: string]: boolean };
 }
 
 export function CompactProductCard({
@@ -45,7 +46,8 @@ export function CompactProductCard({
   onAdd,
   onView,
   badgeText,
-  galleryPhotos
+  galleryPhotos,
+  pendingUploads
 }: CompactProductCardProps) {
   const [activeDot, setActiveDot] = useState(0);
 
@@ -107,11 +109,23 @@ export function CompactProductCard({
 
   const activeImageUrl = dotImages[activeDot];
 
+  const isUploading = !!(pendingUploads && (
+    pendingUploads[String(code)] || 
+    (prod.pn && pendingUploads[String(prod.pn)]) || 
+    (prod.id && pendingUploads[String(prod.id)])
+  ));
+
   return (
     <div className="bg-[rgba(255,255,255,0.05)] border border-white/10 rounded-lg p-[10px] flex flex-col w-full h-[420px] shrink-0 text-left">
       
       {/* Upper Area with Image and Dots */}
-      <div className="relative border border-[#212121] rounded bg-black flex flex-col justify-between h-[160px] shrink-0">
+      <div className="relative border border-[#212121] rounded bg-black flex flex-col justify-between h-[160px] shrink-0 overflow-hidden">
+        {isUploading && (
+          <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-2 z-20 transition-all">
+            <div className="w-7 h-7 border-2 border-[#F5C518] border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-[9px] font-mono font-bold text-[#F5C518] animate-pulse uppercase tracking-wider">Syncing Image...</span>
+          </div>
+        )}
         <div className="flex justify-center gap-2 pt-2 z-10">
           {dotImages.map((img, index) => {
             const label = ['Manual', 'Front', 'Side', 'Back', 'Top'][index];
@@ -1057,6 +1071,8 @@ export default function App() {
     }
   });
 
+  const [pendingUploads, setPendingUploads] = useState<Record<string, boolean>>({});
+
   const handleUpdateImageCache = (key: string, val: string) => {
     setImageCache(prev => {
       const next = { ...prev, [key]: val };
@@ -1097,11 +1113,13 @@ export default function App() {
     // Save each photo to Firestore in background & parallel to avoid blocking UI thread
     Promise.resolve().then(async () => {
       await Promise.all(
-        formatted.map(photo =>
-          setDoc(doc(db, 'gallery', String(photo.id)), photo).catch(err => {
+        formatted.map(photo => {
+          // STRIP fallbackUrl from the Firestore payload to keep documents lightweight and compliant with the 1MB size limit!
+          const { fallbackUrl, ...cloudPhoto } = photo;
+          return setDoc(doc(db, 'gallery', String(cloudPhoto.id)), cloudPhoto).catch(err => {
             console.warn("Gallery cloud sync notice (operating in local fallback): ", err);
-          })
-        )
+          });
+        })
       );
     });
   };
@@ -2010,7 +2028,36 @@ export default function App() {
             console.warn("Gallery seeding notice (operating in local fallback): ", err);
           }
         });
-        setGalleryPhotos(formattedList);
+        setGalleryPhotos(prev => {
+          const merged = [...formattedList];
+          prev.forEach(localItem => {
+            if (localItem.isCustom) {
+              const exists = merged.some(m => String(m.id) === String(localItem.id));
+              if (!exists) {
+                merged.push(localItem);
+              }
+            }
+          });
+          merged.sort((a, b) => {
+            const aCustom = !!a.isCustom;
+            const bCustom = !!b.isCustom;
+            if (aCustom && !bCustom) return -1;
+            if (!aCustom && bCustom) return 1;
+            if (aCustom && bCustom) {
+              return b.id.localeCompare(a.id);
+            }
+            const aIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(a.id));
+            const bIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(b.id));
+            if (aIdx > -1 && bIdx > -1) {
+              return aIdx - bIdx;
+            }
+            if (aIdx > -1) return -1;
+            if (bIdx > -1) return 1;
+            return b.id.localeCompare(a.id);
+          });
+          localStorage.setItem('ht_gallery_photos', JSON.stringify(merged));
+          return merged;
+        });
       } else {
         const items: any[] = [];
         snapshot.forEach((doc) => {
@@ -2060,25 +2107,47 @@ export default function App() {
           });
         }
 
-        items.sort((a, b) => {
-          const aCustom = !!a.isCustom;
-          const bCustom = !!b.isCustom;
-          if (aCustom && !bCustom) return -1;
-          if (!aCustom && bCustom) return 1;
-          if (aCustom && bCustom) {
+        setGalleryPhotos(prev => {
+          // Merge snapshot items with previous state to preserve fallbackUrl and prevent missing local custom photos from disappearing
+          const merged = items.map(remoteItem => {
+            const localItem = prev.find(p => String(p.id) === String(remoteItem.id));
+            if (localItem && localItem.fallbackUrl && !remoteItem.fallbackUrl) {
+              return { ...remoteItem, fallbackUrl: localItem.fallbackUrl };
+            }
+            return remoteItem;
+          });
+
+          // Also retain any local custom photos that are not yet in the remote Firestore list
+          prev.forEach(localItem => {
+            if (localItem.isCustom) {
+              const existsInRemote = items.some(remoteItem => String(remoteItem.id) === String(localItem.id));
+              if (!existsInRemote) {
+                merged.push(localItem);
+              }
+            }
+          });
+
+          merged.sort((a, b) => {
+            const aCustom = !!a.isCustom;
+            const bCustom = !!b.isCustom;
+            if (aCustom && !bCustom) return -1;
+            if (!aCustom && bCustom) return 1;
+            if (aCustom && bCustom) {
+              return b.id.localeCompare(a.id);
+            }
+            const aIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(a.id));
+            const bIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(b.id));
+            if (aIdx > -1 && bIdx > -1) {
+              return aIdx - bIdx;
+            }
+            if (aIdx > -1) return -1;
+            if (bIdx > -1) return 1;
             return b.id.localeCompare(a.id);
-          }
-          const aIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(a.id));
-          const bIdx = GALLERY_PHOTOS.findIndex(p => String(p.id) === String(b.id));
-          if (aIdx > -1 && bIdx > -1) {
-            return aIdx - bIdx;
-          }
-          if (aIdx > -1) return -1;
-          if (bIdx > -1) return 1;
-          return b.id.localeCompare(a.id);
+          });
+
+          localStorage.setItem('ht_gallery_photos', JSON.stringify(merged));
+          return merged;
         });
-        setGalleryPhotos(items);
-        localStorage.setItem('ht_gallery_photos', JSON.stringify(items));
       }
     }, (error) => {
       // Graceful local offline fallback
@@ -2197,6 +2266,7 @@ export default function App() {
         onView={onView}
         badgeText={badgeText}
         galleryPhotos={galleryPhotos}
+        pendingUploads={pendingUploads}
       />
     );
   };
@@ -3751,6 +3821,7 @@ Message: ${quickMessageText}`;
                 const reader = new FileReader();
                 reader.onloadend = async () => {
                   const dataUrl = reader.result as string;
+                  setPendingUploads(prev => ({ ...prev, [selectedItem.code]: true }));
                   try {
                     // Compress image client-side to make it lightweight
                     const compressedBase64 = await compressImage(dataUrl);
@@ -3792,6 +3863,12 @@ Message: ${quickMessageText}`;
                     // Update product imageCache
                     handleUpdateImageCache(selectedItem.idVal.toString(), compressedFallback);
                     alert(`📥 Photo saved (cloud database fallback) & bound to Product Code [${selectedItem.code}]!`);
+                  } finally {
+                    setPendingUploads(prev => {
+                      const next = { ...prev };
+                      delete next[selectedItem.code];
+                      return next;
+                    });
                   }
                 };
                 reader.readAsDataURL(file);
@@ -4196,6 +4273,9 @@ Message: ${quickMessageText}`;
                                                 const reader = new FileReader();
                                                 reader.onloadend = async () => {
                                                   const dataUrl = reader.result as string;
+                                                  if (item.pn) {
+                                                    setPendingUploads(prev => ({ ...prev, [item.pn]: true }));
+                                                  }
                                                   try {
                                                     const compressedBase64 = await compressImage(dataUrl);
                                                     const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
@@ -4219,6 +4299,14 @@ Message: ${quickMessageText}`;
                                                     saveGalleryPhotosToStorage(nextPhotos);
                                                     handleUpdateImageCache(item.id.toString(), compressedFallback);
                                                     alert("📷 Image saved (local cache fallback)!");
+                                                  } finally {
+                                                    if (item.pn) {
+                                                      setPendingUploads(prev => {
+                                                        const next = { ...prev };
+                                                        delete next[item.pn];
+                                                        return next;
+                                                      });
+                                                    }
                                                   }
                                                 };
                                                 reader.readAsDataURL(file);
@@ -4239,6 +4327,9 @@ Message: ${quickMessageText}`;
                                               const reader = new FileReader();
                                               reader.onloadend = async () => {
                                                 const dataUrl = reader.result as string;
+                                                if (item.pn) {
+                                                  setPendingUploads(prev => ({ ...prev, [item.pn]: true }));
+                                                }
                                                 try {
                                                   const compressedBase64 = await compressImage(dataUrl);
                                                   const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
@@ -4270,6 +4361,14 @@ Message: ${quickMessageText}`;
                                                   saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
                                                   handleUpdateImageCache(item.id.toString(), compressedFallback);
                                                   alert("📷 Image uploaded (local fallback db synched)!");
+                                                } finally {
+                                                  if (item.pn) {
+                                                    setPendingUploads(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[item.pn];
+                                                      return next;
+                                                    });
+                                                  }
                                                 }
                                               };
                                               reader.readAsDataURL(file);
@@ -4406,6 +4505,9 @@ Message: ${quickMessageText}`;
                                                 const reader = new FileReader();
                                                 reader.onloadend = async () => {
                                                   const dataUrl = reader.result as string;
+                                                  if (item.id) {
+                                                    setPendingUploads(prev => ({ ...prev, [item.id]: true }));
+                                                  }
                                                   try {
                                                     const compressedBase64 = await compressImage(dataUrl);
                                                     const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
@@ -4429,6 +4531,14 @@ Message: ${quickMessageText}`;
                                                     saveGalleryPhotosToStorage(nextPhotos);
                                                     handleUpdateImageCache(item.id, compressedFallback);
                                                     alert("📷 Image saved (local cache fallback)!");
+                                                  } finally {
+                                                    if (item.id) {
+                                                      setPendingUploads(prev => {
+                                                        const next = { ...prev };
+                                                        delete next[item.id];
+                                                        return next;
+                                                      });
+                                                    }
                                                   }
                                                 };
                                                 reader.readAsDataURL(file);
@@ -4449,6 +4559,9 @@ Message: ${quickMessageText}`;
                                               const reader = new FileReader();
                                               reader.onloadend = async () => {
                                                 const dataUrl = reader.result as string;
+                                                if (item.id) {
+                                                  setPendingUploads(prev => ({ ...prev, [item.id]: true }));
+                                                }
                                                 try {
                                                   const compressedBase64 = await compressImage(dataUrl);
                                                   const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedBase64, cloudinaryConfig);
@@ -4480,6 +4593,14 @@ Message: ${quickMessageText}`;
                                                   saveGalleryPhotosToStorage([newPhoto, ...galleryPhotos]);
                                                   handleUpdateImageCache(item.id, compressedFallback);
                                                   alert("📷 Image uploaded (local fallback db synched)!");
+                                                } finally {
+                                                  if (item.id) {
+                                                    setPendingUploads(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[item.id];
+                                                      return next;
+                                                    });
+                                                  }
                                                 }
                                               };
                                               reader.readAsDataURL(file);
