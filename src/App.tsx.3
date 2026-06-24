@@ -27,31 +27,6 @@ import ProductDetailOverlay, { getDefaultProductImage } from './components/Produ
 import { getAccessToken, appendSaleLog, appendRepairRecord } from './lib/sheetsService';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
-
-const customStorage = {
-  setItem: (key: string, value: string) => {
-    // We only care about syncing the items that aren't already syncing via collection snapshots.
-    // The collections (products, repairs, requests, etc.) already have Firestore setDoc/deleteDoc logic.
-    // So for them, customStorage.setItem is a no-op fallback.
-    const settingsKeys = ['ht_cart', 'ht_solar_cart', 'ht_bank_acc', 'ht_deals', 'ht_contacts', 'ht_opening_photo', 'ht_live_embed', 'ht_display_floor_active', 'ht_display_floor_saved', 'ht_spreadsheet_id', 'ht_csv_upload_status', 'ht_img_cache', 'ht_mgrstatus', 'ht_staff_login', 'ht_staff_role'];
-    if (settingsKeys.includes(key)) {
-       const shortKey = key.replace('ht_', '');
-       let parsed = value;
-       try { parsed = JSON.parse(value); } catch(e) {}
-       setDoc(doc(db, 'app_settings', 'global'), { [shortKey]: { data: parsed } }, { merge: true }).catch(console.warn);
-    }
-    const spreadsheetKeys = ['ht_spreadsheet_headers', 'ht_spreadsheet_rows', 'ht_last_imported_headers', 'ht_last_imported_rows'];
-    if (spreadsheetKeys.includes(key)) {
-       const shortKey = key.replace('ht_', '');
-       let parsed = value;
-       try { parsed = JSON.parse(value); } catch(e) {}
-       setDoc(doc(db, 'app_settings', 'spreadsheet'), { [shortKey]: { data: parsed } }, { merge: true }).catch(console.warn);
-    }
-  },
-  getItem: (key: string) => null,
-  removeItem: (key: string) => {}
-};
-
 import { compressImage } from './lib/imageCompressor';
 import { uploadFile } from './lib/uploadService';
 import * as XLSX from 'xlsx';
@@ -259,13 +234,13 @@ export default function App() {
   // Typewriter HITECH landing letters
   const [typewriterLetters, setTypewriterLetters] = useState<string[]>([]);
   
-  // App Dynamic State (synced to Firestore)
+  // App Dynamic State (persisted inside client localStorage)
   const [cart, setCart] = useState<{ [productId: number]: number }>({});
   const [solarCart, setSolarCart] = useState<{ [solarId: string]: number }>({});
   
   const [productsList, setProductsList] = useState<Product[]>(() => {
     try {
-      const stored = customStorage.getItem('ht_products');
+      const stored = null;
       return stored ? JSON.parse(stored) : PRODS;
     } catch {
       return PRODS;
@@ -273,7 +248,7 @@ export default function App() {
   });
   const [solarProductsList, setSolarProductsList] = useState<SolarProduct[]>(() => {
     try {
-      const stored = customStorage.getItem('ht_solar_products');
+      const stored = null;
       return stored ? JSON.parse(stored) : SOLAR;
     } catch {
       return SOLAR;
@@ -308,7 +283,7 @@ export default function App() {
     }
 
     try {
-      customStorage.setItem('ht_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       // Sanitize the product to exactly match standard schema keys & size limits defined in security rules
       const cleanProduct: any = {
         id: Number(prod.id),
@@ -335,7 +310,7 @@ export default function App() {
     const nextList = productsList.filter(p => p.id !== id);
     setProductsList(nextList);
     try {
-      customStorage.setItem('ht_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       await deleteDoc(doc(db, 'products', String(id)));
     } catch (e) {
       console.warn("Error deleting product from Cloud Firestore: ", e);
@@ -368,7 +343,7 @@ export default function App() {
     }
 
     try {
-      customStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       // Sanitize the solar product to exactly match solar schema keys & size limits defined in security rules
       const cleanSolarProduct: any = {
         id: String(solar.id || '').substring(0, 128),
@@ -392,7 +367,7 @@ export default function App() {
     const nextList = solarProductsList.filter(s => s.id !== id);
     setSolarProductsList(nextList);
     try {
-      customStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       await deleteDoc(doc(db, 'solar_products', id));
     } catch (e) {
       console.warn("Error deleting solar product from Cloud Firestore: ", e);
@@ -404,7 +379,7 @@ export default function App() {
     const nextList = productsList.filter(p => !idsString.includes(String(p.id)));
     setProductsList(nextList);
     try {
-      customStorage.setItem('ht_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       const promises = ids.map(id => deleteDoc(doc(db, 'products', String(id))));
       await Promise.all(promises);
     } catch (e) {
@@ -416,7 +391,7 @@ export default function App() {
     const nextList = solarProductsList.filter(s => !ids.includes(s.id));
     setSolarProductsList(nextList);
     try {
-      customStorage.setItem('ht_solar_products', JSON.stringify(nextList));
+      /* removed localStorage sync */);
       const promises = ids.map(id => deleteDoc(doc(db, 'solar_products', id)));
       await Promise.all(promises);
     } catch (e) {
@@ -498,7 +473,7 @@ export default function App() {
       return p;
     });
     setGalleryPhotos(nextPhotos);
-    customStorage.setItem('ht_gallery_photos', JSON.stringify(nextPhotos));
+    /* removed localStorage sync */);
 
     try {
       const docToSend = {
@@ -522,14 +497,14 @@ export default function App() {
   // Staff Direct Mode states
   const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(() => {
     try {
-      return customStorage.getItem('ht_staff_login') === 'true';
+      return localStorage.getItem('ht_staff_login') === 'true';
     } catch {
       return false;
     }
   });
   const [staffRole, setStaffRole] = useState(() => {
     try {
-      return customStorage.getItem('ht_staff_role') || 'staff';
+      return localStorage.getItem('ht_staff_role') || 'staff';
     } catch {
       return 'staff';
     }
@@ -754,17 +729,7 @@ export default function App() {
   }, [db]);
 
   useEffect(() => {
-    const handleSync = () => {
-      try {
-        const logged = customStorage.getItem('ht_staff_login') === 'true';
-        const r = customStorage.getItem('ht_staff_role') || 'staff';
-        if (logged !== isStaffLoggedIn) setIsStaffLoggedIn(logged);
-        if (r !== staffRole) setStaffRole(r);
-      } catch (e) {
-        // Safe fallback
-      }
-    };
-    const timer = setInterval(handleSync, 500);
+    
 
     // Sync products and solar products from Firestore realtime
     let unsubP = () => {};
@@ -778,7 +743,7 @@ export default function App() {
         if (list.length > 0) {
           list.sort((a, b) => a.id - b.id);
           setProductsList(list);
-          customStorage.setItem('ht_products', JSON.stringify(list));
+          /* removed localStorage sync */);
         } else {
           // Empty on Firestore – seed initial PRODS
           PRODS.forEach((p) => {
@@ -798,7 +763,7 @@ export default function App() {
         });
         if (list.length > 0) {
           setSolarProductsList(list);
-          customStorage.setItem('ht_solar_products', JSON.stringify(list));
+          /* removed localStorage sync */);
         } else {
           // Empty on Firestore – seed initial SOLAR
           SOLAR.forEach((s) => {
@@ -815,7 +780,7 @@ export default function App() {
     }
 
     return () => {
-      clearInterval(timer);
+      
       unsubP();
       unsubS();
     };
@@ -864,17 +829,13 @@ export default function App() {
     payingBank: 'UBA'
   });
 
-  const [openingPhotoUrl, setOpeningPhotoUrl] = useState(() => {
-    return customStorage.getItem('ht_opening_photo') || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1600&q=80';
-  });
+  const [openingPhotoUrl, setOpeningPhotoUrl] = useState('https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1600&q=80');
   
-  const [liveEmbedUrl, setLiveEmbedUrl] = useState(() => {
-    return customStorage.getItem('ht_live_embed') || 'https://www.youtube.com/embed/live_stream?channel=UC...';
-  });
+  const [liveEmbedUrl, setLiveEmbedUrl] = useState('https://www.youtube.com/embed/live_stream?channel=UC...');
 
   const [contacts, setContacts] = useState(() => {
     try {
-      const stored = customStorage.getItem('ht_contacts');
+      const stored = localStorage.getItem('ht_contacts');
       if (stored) {
         const parsed = JSON.parse(stored);
         // If the parsed state contains old dummy default placeholder values, migrate them immediately!
@@ -911,7 +872,7 @@ export default function App() {
 
   const [requestsList, setRequestsList] = useState<any[]>(() => {
     try {
-      const stored = customStorage.getItem('ht_requests');
+      const stored = null;
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -920,20 +881,18 @@ export default function App() {
 
   const [galleryVideos, setGalleryVideos] = useState<any[]>(() => {
     try {
-      const stored = customStorage.getItem('ht_videos');
+      const stored = null;
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
     }
   });
 
-  const [displayFloorActiveLayout, setDisplayFloorActiveLayout] = useState<string>(() => {
-    return customStorage.getItem('ht_display_floor_active') || '1, 2, 3, 4, 14, 25, 30, 42, 44, 45, 46, 47, 48, 49, 55, 56, 58';
-  });
+  const [displayFloorActiveLayout, setDisplayFloorActiveLayout] = useState<string>('1, 2, 3, 4, 14, 25, 30, 42, 44, 45, 46, 47, 48, 49, 55, 56, 58');
 
   const [displayFloorSavedConfigs, setDisplayFloorSavedConfigs] = useState<{ [name: string]: string }>(() => {
     try {
-      const stored = customStorage.getItem('ht_display_floor_saved');
+      const stored = localStorage.getItem('ht_display_floor_saved');
       const parsed = stored ? JSON.parse(stored) : null;
       if (parsed) {
         return {
@@ -963,13 +922,11 @@ export default function App() {
     }
   });
 
-  const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
-    return customStorage.getItem('ht_spreadsheet_id') || '';
-  });
+  const [spreadsheetId, setSpreadsheetId] = useState<string>('');
 
   const handleUpdateSpreadsheetId = (id: string) => {
     setSpreadsheetId(id);
-    customStorage.setItem('ht_spreadsheet_id', id);
+    setDoc(doc(db, 'app_settings', 'spreadsheet_id'), { data: id }, { merge: true });
   };
 
   const [activeManagerTab, setActiveManagerTab] = useState<'sales' | 'inventory' | 'gm'>('sales');
@@ -980,7 +937,7 @@ export default function App() {
 
   const [spreadsheetHeaders, setSpreadsheetHeaders] = useState<string[]>(() => {
     try {
-      const saved = customStorage.getItem('ht_spreadsheet_headers');
+      const saved = localStorage.getItem('ht_spreadsheet_headers');
       return saved ? JSON.parse(saved) : [
         "Display Order", "Brand", "Product Code", "Category", "Description Headline", "Description Bullets", "Technical Specs", "Price (₦)", "Stock Status", "Floor Display (Yes/No)", "Front Image (Cloudinary)", "Side Image (Cloudinary)", "Back Image (Cloudinary)", "Top Image (Cloudinary)", "Video (Cloudinary)", "Staff Notes", "Needs Verification"
       ];
@@ -993,7 +950,7 @@ export default function App() {
 
   const [spreadsheetRows, setSpreadsheetRows] = useState<string[][]>(() => {
     try {
-      const saved = customStorage.getItem('ht_spreadsheet_rows');
+      const saved = localStorage.getItem('ht_spreadsheet_rows');
       return saved ? JSON.parse(saved) : [
         ["1", "HP", "PRO-X360", "Laptops", "ProBook x360 435 G10", "Slick 2-in-1 convertible touchscreen laptop ideal for professionals.", "AMD Ryzen 5 • 16GB RAM • 512GB SSD • Windows 11 Pro", "650000", "In Stock", "Yes", "https://images.unsplash.com/photo-1593642532823-8f785ba67e45?w=600", "https://images.unsplash.com/photo-1593642532400-2682810df593?w=300", "", "", "https://www.w3sheets.com/sample-video.mp4", "Premium performance built to last", "No"],
         ["2", "Epson", "ECO-L3250", "Printers", "EcoTank L3250 Wi-Fi", "High performance cartridge-free color printing scanning and copying.", "Wi-Fi Direct • Borderless Printing • High Yield Ink Bottles", "220000", "In Stock", "Yes", "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=600", "", "", "", "", "Excellent low cost printing", "No"]
@@ -1077,18 +1034,11 @@ export default function App() {
 
   // Selected item detail modal
   const [selectedProduct, setSelectedProduct] = useState<Product | SolarProduct | null>(null);
-  const [imageCache, setImageCache] = useState<{ [key: string]: string }>(() => {
-    try {
-      const persistedI = customStorage.getItem('ht_img_cache');
-      return persistedI ? JSON.parse(persistedI) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [imageCache, setImageCache] = useState<{ [key: string]: string }>({});
 
   const [galleryPhotos, setGalleryPhotos] = useState<any[]>(() => {
     try {
-      const persistedG = customStorage.getItem('ht_gallery_photos');
+      const persistedG = null;
       const parsed = persistedG ? JSON.parse(persistedG) : GALLERY_PHOTOS;
       return parsed.map((photo: any) => ({
         id: String(photo.id),
@@ -1119,7 +1069,7 @@ export default function App() {
   const handleUpdateImageCache = (key: string, val: string) => {
     setImageCache(prev => {
       const next = { ...prev, [key]: val };
-      customStorage.setItem('ht_img_cache', JSON.stringify(next));
+      setDoc(doc(db, 'app_settings', 'img_cache'), { data: next }, { merge: true });
       return next;
     });
   };
@@ -1151,7 +1101,7 @@ export default function App() {
     });
 
     setGalleryPhotos(formatted);
-    customStorage.setItem('ht_gallery_photos', JSON.stringify(formatted));
+    /* removed localStorage sync */);
     
     // Save each photo to Firestore in background & parallel to avoid blocking UI thread
     Promise.resolve().then(async () => {
@@ -1167,9 +1117,7 @@ export default function App() {
     });
   };
 
-  const [csvUploadStatus, setCsvUploadStatus] = useState<string>(() => {
-    return customStorage.getItem('ht_csv_upload_status') || 'No Google Sheets CSV imported yet';
-  });
+  const [csvUploadStatus, setCsvUploadStatus] = useState<string>('No Google Sheets CSV imported yet');
 
   const [csvUploadNotification, setCsvUploadNotification] = useState<{
     status: 'success' | 'error';
@@ -1455,22 +1403,22 @@ export default function App() {
           // Discard any previous spreadsheet video imports (prefixed with 'sheet_vid_')
           const customVids = prev.filter(v => !String(v.id).startsWith('sheet_vid_'));
           const joined = [...parsedVideos, ...customVids];
-          customStorage.setItem('ht_videos', JSON.stringify(joined));
+          /* removed localStorage sync */);
           return joined;
         });
       }
 
       const statusText = `✅ Google Sheets data loaded successfully! 📊 ${parsedProducts.length} products loaded`;
       setCsvUploadStatus(statusText);
-      customStorage.setItem('ht_csv_upload_status', statusText);
+      setDoc(doc(db, 'app_settings', 'csv_upload_status'), { data: statusText }, { merge: true });
       
       if (allRows.length > 0) {
         setSpreadsheetHeaders(allRows[0]);
         setSpreadsheetRows(allRows.slice(1));
-        customStorage.setItem('ht_spreadsheet_headers', JSON.stringify(allRows[0]));
-        customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(allRows.slice(1)));
-        customStorage.setItem('ht_last_imported_headers', JSON.stringify(allRows[0]));
-        customStorage.setItem('ht_last_imported_rows', JSON.stringify(allRows.slice(1)));
+        setDoc(doc(db, 'app_settings', 'spreadsheet'), { headers: { data: allRows[0] } }, { merge: true });
+        setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: allRows.slice(1 } }, { merge: true }););
+        setDoc(doc(db, 'app_settings', 'spreadsheet'), { last_imported_headers: { data: allRows[0] } }, { merge: true });
+        setDoc(doc(db, 'app_settings', 'spreadsheet'), { last_imported_rows: { data: allRows.slice(1 } }, { merge: true }););
       }
 
       const day = new Date().getDate();
@@ -1679,18 +1627,18 @@ export default function App() {
         setGalleryVideos(prev => {
           const customVids = prev.filter(v => !String(v.id).startsWith('sheet_vid_'));
           const joined = [...parsedVideos, ...customVids];
-          customStorage.setItem('ht_videos', JSON.stringify(joined));
+          /* removed localStorage sync */);
           return joined;
         });
       }
 
       // Sync local spreadsheet states just in case
-      customStorage.setItem('ht_spreadsheet_headers', JSON.stringify(customHeaders));
-      customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(customRows));
+      setDoc(doc(db, 'app_settings', 'spreadsheet'), { headers: { data: customHeaders } }, { merge: true });
+      setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: customRows } }, { merge: true });
 
       const statusText = `✅ Workbook synchronized successfully! 📊 ${parsedProducts.length} items active standard live products.`;
       setCsvUploadStatus(statusText);
-      customStorage.setItem('ht_csv_upload_status', statusText);
+      setDoc(doc(db, 'app_settings', 'csv_upload_status'), { data: statusText }, { merge: true });
       if (!isSilent) alert(statusText);
     } catch (err: any) {
       if (!isSilent) alert("Error synchronizing spreadsheet to database: " + err.message);
@@ -1761,13 +1709,13 @@ export default function App() {
         await deleteDoc(doc(db, 'videos', d.id));
       }
 
-      customStorage.removeItem('ht_products');
-      customStorage.removeItem('ht_gallery_photos');
-      customStorage.removeItem('ht_videos');
-      customStorage.removeItem('ht_img_cache');
+      /* removed localStorage rm */
+      /* removed localStorage rm */
+      /* removed localStorage rm */
+      /* removed localStorage rm */
       
       setCsvUploadStatus('No Google Sheets CSV imported yet');
-      customStorage.removeItem('ht_csv_upload_status');
+      /* removed localStorage rm */
 
       alert("🎉 Cloud reset complete! The system will now reload and re-seed clean default products & gallery assets.");
       window.location.reload();
@@ -1806,23 +1754,23 @@ export default function App() {
           setTypewriterLetters(prev => [...prev, charToAppend]);
           i++;
         } else {
-          clearInterval(timer);
+          
         }
       }, 250);
-      return () => clearInterval(timer);
+      return () => 
     }
   }, [view]);
 
   // Load non-Firestore state from local storage
   useEffect(() => {
     try {
-      const persistedC = customStorage.getItem('ht_cart');
-      const persistedS = customStorage.getItem('ht_solar_cart');
-      const persistedP = customStorage.getItem('ht_prods');
-      const persistedSolar = customStorage.getItem('ht_solar');
-      const persistedD = customStorage.getItem('ht_deals');
-      const persistedBank = customStorage.getItem('ht_bank_acc');
-      const persistedStatus = customStorage.getItem('ht_mgrstatus');
+      const persistedC = localStorage.getItem('ht_cart');
+      const persistedS = localStorage.getItem('ht_solar_cart');
+      const persistedP = localStorage.getItem('ht_prods');
+      const persistedSolar = localStorage.getItem('ht_solar');
+      const persistedD = localStorage.getItem('ht_deals');
+      const persistedBank = localStorage.getItem('ht_bank_acc');
+      const persistedStatus = localStorage.getItem('ht_mgrstatus');
 
       if (persistedC) setCart(JSON.parse(persistedC));
       if (persistedS) setSolarCart(JSON.parse(persistedS));
@@ -1903,12 +1851,12 @@ export default function App() {
         });
         items.sort((a, b) => b.id.localeCompare(a.id));
         setReviewsList(items);
-        customStorage.setItem('ht_rev', JSON.stringify(items));
+        /* removed localStorage sync */);
       }
     }, (error) => {
       // Graceful local offline fallback
       try {
-        const persistedRev = customStorage.getItem('ht_rev');
+        const persistedRev = null;
         if (persistedRev) {
           setReviewsList(JSON.parse(persistedRev));
         } else {
@@ -1935,11 +1883,11 @@ export default function App() {
       });
       items.sort((a, b) => b.id.localeCompare(a.id));
       setRepairsList(items);
-      customStorage.setItem('ht_repairs', JSON.stringify(items));
+      /* removed localStorage sync */);
     }, (error) => {
       // Graceful local offline fallback
       try {
-        const persistedR = customStorage.getItem('ht_repairs');
+        const persistedR = null;
         if (persistedR) {
           setRepairsList(JSON.parse(persistedR));
         } else {
@@ -1957,24 +1905,24 @@ export default function App() {
   useEffect(() => {
     let unsubGlobal = () => {};
     let unsubSpreadsheet = () => {};
+    let unsubDeals = () => {};
 
     try {
       unsubGlobal = onSnapshot(doc(db, 'app_settings', 'global'), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.cart !== undefined) setCart(data.cart.data || {});
-          if (data.solar_cart !== undefined) setSolarCart(data.solar_cart.data || {});
-          if (data.bank_acc !== undefined) setBankAccount(data.bank_acc.data);
-          if (data.contacts !== undefined) setContacts(data.contacts.data);
-          if (data.opening_photo !== undefined) setOpeningPhotoUrl(data.opening_photo.data);
-          if (data.live_embed !== undefined) setLiveEmbedUrl(data.live_embed.data);
-          if (data.display_floor_active !== undefined) setDisplayFloorActiveLayout(data.display_floor_active.data);
-          if (data.display_floor_saved !== undefined) setDisplayFloorSavedConfigs(data.display_floor_saved.data);
-          if (data.spreadsheet_id !== undefined) setSpreadsheetId(data.spreadsheet_id.data);
-          if (data.csv_upload_status !== undefined) setCsvUploadStatus(data.csv_upload_status.data);
-          if (data.mgrstatus !== undefined) setMgrStatus(data.mgrstatus.data);
-          if (data.img_cache !== undefined) setImageCache(data.img_cache.data || {});
-          if (data.deals !== undefined) setDealsList(data.deals.data || []);
+          if (data.cart) setCart(data.cart.data || {});
+          if (data.solar_cart) setSolarCart(data.solar_cart.data || {});
+          if (data.bank_acc) setBankAccount(data.bank_acc.data);
+          if (data.contacts) setContacts(data.contacts.data);
+          if (data.opening_photo) setOpeningPhotoUrl(data.opening_photo.data);
+          if (data.live_embed) setLiveEmbedUrl(data.live_embed.data);
+          if (data.display_floor_active) setDisplayFloorActiveLayout(data.display_floor_active.data);
+          if (data.display_floor_saved) setDisplayFloorSavedConfigs(data.display_floor_saved.data);
+          if (data.spreadsheet_id) setSpreadsheetId(data.spreadsheet_id.data);
+          if (data.csv_upload_status) setCsvUploadStatus(data.csv_upload_status.data);
+          if (data.mgrstatus) setMgrStatus(data.mgrstatus.data);
+          if (data.img_cache) setImageCache(data.img_cache.data || {});
           
           if (data.staff_login !== undefined) setIsStaffLoggedIn(data.staff_login.data);
           if (data.staff_role !== undefined) setStaffRole(data.staff_role.data);
@@ -1984,10 +1932,15 @@ export default function App() {
       unsubSpreadsheet = onSnapshot(doc(db, 'app_settings', 'spreadsheet'), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.spreadsheet_headers !== undefined) setSpreadsheetHeaders(data.spreadsheet_headers.data || []);
-          if (data.spreadsheet_rows !== undefined) setSpreadsheetRows(data.spreadsheet_rows.data || []);
-          // if (data.last_imported_headers !== undefined) ... handled lazily maybe
+          if (data.headers) setSpreadsheetHeaders(data.headers.data || []);
+          if (data.rows) setSpreadsheetRows(data.rows.data || []);
         }
+      });
+      
+      unsubDeals = onSnapshot(collection(db, 'deals'), (snapshot) => {
+        const list: Deal[] = [];
+        snapshot.forEach((d) => list.push(d.data() as Deal));
+        if (list.length > 0) setDealsList(list);
       });
     } catch (err) {
       console.warn("Global config live sync error:", err);
@@ -1995,6 +1948,7 @@ export default function App() {
     return () => {
       unsubGlobal();
       unsubSpreadsheet();
+      unsubDeals();
     };
   }, []);
 
@@ -2007,10 +1961,10 @@ export default function App() {
       });
       items.sort((a, b) => b.id.localeCompare(a.id));
       setEscalationsList(items);
-      customStorage.setItem('ht_escalations', JSON.stringify(items));
+      /* removed localStorage sync */);
     }, (error) => {
       try {
-        const persisted = customStorage.getItem('ht_escalations');
+        const persisted = null;
         if (persisted) {
           setEscalationsList(JSON.parse(persisted));
         } else {
@@ -2033,10 +1987,10 @@ export default function App() {
       });
       items.sort((a, b) => b.id.localeCompare(a.id));
       setManagerRequestsList(items);
-      customStorage.setItem('ht_manager_requests', JSON.stringify(items));
+      /* removed localStorage sync */);
     }, (error) => {
       try {
-        const persisted = customStorage.getItem('ht_manager_requests');
+        const persisted = null;
         if (persisted) {
           setManagerRequestsList(JSON.parse(persisted));
         } else {
@@ -2069,14 +2023,14 @@ export default function App() {
           });
           items.sort((a, b) => b.id.localeCompare(a.id));
           setGmqList(items);
-          customStorage.setItem('ht_gmq', JSON.stringify(items));
+          /* removed localStorage sync */);
         }, (error) => {
           handleFirestoreError(error, OperationType.LIST, 'gmq');
         });
       } else {
-        // Unauthenticated guests read and write to their own local GMQueue list in Firestore
+        // Unauthenticated guests read and write to their own local GMQueue list in localStorage
         try {
-          const persistedG = customStorage.getItem('ht_gmq');
+          const persistedG = null;
           if (persistedG) {
             setGmqList(JSON.parse(persistedG));
           } else {
@@ -2143,7 +2097,7 @@ export default function App() {
             if (bIdx > -1) return 1;
             return b.id.localeCompare(a.id);
           });
-          customStorage.setItem('ht_gallery_photos', JSON.stringify(merged));
+          /* removed localStorage sync */);
           return merged;
         });
       } else {
@@ -2233,14 +2187,14 @@ export default function App() {
             return b.id.localeCompare(a.id);
           });
 
-          customStorage.setItem('ht_gallery_photos', JSON.stringify(merged));
+          /* removed localStorage sync */);
           return merged;
         });
       }
     }, (error) => {
       // Graceful local offline fallback
       try {
-        const persistedG = customStorage.getItem('ht_gallery_photos');
+        const persistedG = null;
         if (persistedG) {
           setGalleryPhotos(JSON.parse(persistedG));
         } else {
@@ -2273,7 +2227,7 @@ export default function App() {
       });
       items.sort((a, b) => b.id.localeCompare(a.id));
       setRequestsList(items);
-      customStorage.setItem('ht_requests', JSON.stringify(items));
+      /* removed localStorage sync */);
     }, (error) => {
       console.warn("Requests live sync fallback: ", error);
     });
@@ -2286,7 +2240,7 @@ export default function App() {
       });
       items.sort((a, b) => b.id.localeCompare(a.id));
       setGalleryVideos(items);
-      customStorage.setItem('ht_videos', JSON.stringify(items));
+      /* removed localStorage sync */);
     }, (error) => {
       console.warn("Videos live sync fallback: ", error);
     });
@@ -2299,16 +2253,16 @@ export default function App() {
         if (id === 'hero_photo') {
           if (data.url) {
             setOpeningPhotoUrl(data.url);
-            customStorage.setItem('ht_opening_photo', data.url);
+            setDoc(doc(db, 'app_settings', 'opening_photo'), { data: data.url }, { merge: true });
           }
         } else if (id === 'live_embed') {
           if (data.url) {
             setLiveEmbedUrl(data.url);
-            customStorage.setItem('ht_live_embed', data.url);
+            setDoc(doc(db, 'app_settings', 'live_embed'), { data: data.url }, { merge: true });
           }
         } else if (id === 'contacts') {
           setContacts(data);
-          customStorage.setItem('ht_contacts', JSON.stringify(data));
+          setDoc(doc(db, 'app_settings', 'contacts'), { data: data }, { merge: true });
         }
       });
     }, (error) => {
@@ -2325,12 +2279,12 @@ export default function App() {
   // Save to local storage triggers
   const saveCartToStorage = (updatedCart: any) => {
     setCart(updatedCart);
-    customStorage.setItem('ht_cart', JSON.stringify(updatedCart));
+    setDoc(doc(db, 'app_settings', 'cart'), { data: updatedCart }, { merge: true });
   };
 
   const saveSolarCartToStorage = (updatedSolarCart: any) => {
     setSolarCart(updatedSolarCart);
-    customStorage.setItem('ht_solar_cart', JSON.stringify(updatedSolarCart));
+    setDoc(doc(db, 'app_settings', 'solar_cart'), { data: updatedSolarCart }, { merge: true });
   };
 
   const renderCompactProductCard = (
@@ -2354,7 +2308,7 @@ export default function App() {
 
   const handleUpdateProducts = async (updatedProds: Product[]) => {
     setProductsList(updatedProds);
-    customStorage.setItem('ht_products', JSON.stringify(updatedProds));
+    /* removed localStorage sync */);
 
     const currentIds = productsList.map(p => String(p.id));
     const nextIds = updatedProds.map(p => String(p.id));
@@ -2381,7 +2335,7 @@ export default function App() {
 
   const handleUpdateSolarProducts = async (updatedSolars: SolarProduct[]) => {
     setSolarProductsList(updatedSolars);
-    customStorage.setItem('ht_solar_products', JSON.stringify(updatedSolars));
+    /* removed localStorage sync */);
 
     const currentIds = solarProductsList.map(s => s.id);
     const nextIds = updatedSolars.map(s => s.id);
@@ -2408,7 +2362,7 @@ export default function App() {
 
   const handleUpdateRepairs = async (updatedRepairs: RepairRecord[]) => {
     setRepairsList(updatedRepairs);
-    customStorage.setItem('ht_repairs', JSON.stringify(updatedRepairs));
+    /* removed localStorage sync */);
     
     // Delta deletion check
     const currentIds = repairsList.map(r => r.id);
@@ -2435,7 +2389,7 @@ export default function App() {
 
   const handleUpdateGmq = async (updatedGmq: GMRequest[]) => {
     setGmqList(updatedGmq);
-    customStorage.setItem('ht_gmq', JSON.stringify(updatedGmq));
+    /* removed localStorage sync */);
 
     // Delta deletion check
     const currentIds = gmqList.map(g => g.id);
@@ -2462,13 +2416,11 @@ export default function App() {
 
   const handleUpdateBankAccount = (account: typeof bankAccount) => {
     setBankAccount(account);
-    customStorage.setItem('ht_bank_acc', JSON.stringify(account));
+    setDoc(doc(db, 'app_settings', 'bank_acc'), { data: account }, { merge: true });
   };
 
-  const handleAddCustomDeal = (deal: Deal) => {
-    const updated = [deal, ...dealsList];
-    setDealsList(updated);
-    customStorage.setItem('ht_deals', JSON.stringify(updated));
+    const handleAddCustomDeal = (deal: Deal) => {
+    setDoc(doc(db, 'deals', String(deal.id)), deal);
   };
 
   // Operational Request handlers (Manager authorization pipeline)
@@ -2487,7 +2439,7 @@ export default function App() {
     // Update locally
     const updated = [newRequest, ...requestsList];
     setRequestsList(updated);
-    customStorage.setItem('ht_requests', JSON.stringify(updated));
+    /* removed localStorage sync */);
 
     // Save to Firestore
     try {
@@ -2557,7 +2509,7 @@ export default function App() {
     // Mark status as 'approved'
     const updatedRequests = requestsList.map(r => r.id === id ? { ...r, status: 'approved' as const } : r);
     setRequestsList(updatedRequests);
-    customStorage.setItem('ht_requests', JSON.stringify(updatedRequests));
+    /* removed localStorage sync */);
 
     try {
       await setDoc(doc(db, 'requests', id), { ...reqToApprove, status: 'approved' as const });
@@ -2569,7 +2521,7 @@ export default function App() {
   const handleRejectRequest = async (id: string, notes: string) => {
     const updatedRequests = requestsList.map(r => r.id === id ? { ...r, status: 'rejected' as const, managerComment: notes } : r);
     setRequestsList(updatedRequests);
-    customStorage.setItem('ht_requests', JSON.stringify(updatedRequests));
+    /* removed localStorage sync */);
 
     const reqToReject = requestsList.find(r => r.id === id);
     if (reqToReject) {
@@ -2583,7 +2535,7 @@ export default function App() {
 
   const handleUpdateOpeningPhoto = async (url: string) => {
     setOpeningPhotoUrl(url);
-    customStorage.setItem('ht_opening_photo', url);
+    setDoc(doc(db, 'app_settings', 'opening_photo'), { data: url }, { merge: true });
     try {
       await setDoc(doc(db, 'app_config', 'hero_photo'), { url });
     } catch (err) {
@@ -2593,7 +2545,7 @@ export default function App() {
 
   const handleUpdateLiveEmbedUrl = async (url: string) => {
     setLiveEmbedUrl(url);
-    customStorage.setItem('ht_live_embed', url);
+    setDoc(doc(db, 'app_settings', 'live_embed'), { data: url }, { merge: true });
     try {
       await setDoc(doc(db, 'app_config', 'live_embed'), { url });
     } catch (err) {
@@ -2603,7 +2555,7 @@ export default function App() {
 
   const handleUpdateContacts = async (newContacts: typeof contacts) => {
     setContacts(newContacts);
-    customStorage.setItem('ht_contacts', JSON.stringify(newContacts));
+    setDoc(doc(db, 'app_settings', 'contacts'), { data: newContacts }, { merge: true });
     try {
       await setDoc(doc(db, 'app_config', 'contacts'), newContacts);
     } catch (err) {
@@ -2642,8 +2594,8 @@ const DEFAULT_HARDCODED_CSV = [
   const handleSaveDisplayFloor = async (activeLayout: string, savedConfigs: { [name: string]: string }) => {
     setDisplayFloorActiveLayout(activeLayout);
     setDisplayFloorSavedConfigs(savedConfigs);
-    customStorage.setItem('ht_display_floor_active', activeLayout);
-    customStorage.setItem('ht_display_floor_saved', JSON.stringify(savedConfigs));
+    setDoc(doc(db, 'app_settings', 'display_floor_active'), { data: activeLayout }, { merge: true });
+    setDoc(doc(db, 'app_settings', 'display_floor_saved'), { data: savedConfigs }, { merge: true });
     try {
       await setDoc(doc(db, 'app_config', 'display_floor'), { activeLayout, savedConfigs });
     } catch (err) {
@@ -2661,20 +2613,20 @@ const DEFAULT_HARDCODED_CSV = [
     // 2. Load the corresponding data into Sheet Manager
     if (name === "Default") {
       setSpreadsheetRows(DEFAULT_HARDCODED_CSV);
-      customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(DEFAULT_HARDCODED_CSV));
+      setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: DEFAULT_HARDCODED_CSV } }, { merge: true });
       // Optionally run the sync silently to apply to productsList immediately
       handleSyncSpreadsheetToDatabase(spreadsheetHeaders, DEFAULT_HARDCODED_CSV, true, true);
     } else if (name === "Workbook Display" || name === "Last Imported Sheet") {
       try {
-        const lastRowsStr = customStorage.getItem('ht_last_imported_rows');
-        const lastHeadersStr = customStorage.getItem('ht_last_imported_headers');
+        const lastRowsStr = localStorage.getItem('ht_last_imported_rows');
+        const lastHeadersStr = localStorage.getItem('ht_last_imported_headers');
         if (lastRowsStr && lastHeadersStr) {
           const rows = JSON.parse(lastRowsStr);
           const headers = JSON.parse(lastHeadersStr);
           setSpreadsheetHeaders(headers);
           setSpreadsheetRows(rows);
-          customStorage.setItem('ht_spreadsheet_rows', lastRowsStr);
-          customStorage.setItem('ht_spreadsheet_headers', lastHeadersStr);
+          setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: JSON.parse(lastRowsStr) } }, { merge: true });
+          setDoc(doc(db, 'app_settings', 'spreadsheet'), { headers: { data: JSON.parse(lastHeadersStr) } }, { merge: true });
           handleSyncSpreadsheetToDatabase(headers, rows, true, true);
         }
       } catch (e) {
@@ -2689,7 +2641,7 @@ const DEFAULT_HARDCODED_CSV = [
     const newVideo = { id, ...vid };
     const updated = [newVideo, ...galleryVideos];
     setGalleryVideos(updated);
-    customStorage.setItem('ht_videos', JSON.stringify(updated));
+    /* removed localStorage sync */);
 
     try {
       await setDoc(doc(db, 'videos', id), newVideo);
@@ -2701,7 +2653,7 @@ const DEFAULT_HARDCODED_CSV = [
   const handleRemoveVideo = async (id: string) => {
     const updated = galleryVideos.filter(v => v.id !== id);
     setGalleryVideos(updated);
-    customStorage.setItem('ht_videos', JSON.stringify(updated));
+    /* removed localStorage sync */);
 
     try {
       await deleteDoc(doc(db, 'videos', id));
@@ -2835,7 +2787,7 @@ Message: ${quickMessageText}`;
     };
     const nextQ = [record, ...gmqList];
     setGmqList(nextQ);
-    customStorage.setItem('ht_gmq', JSON.stringify(nextQ));
+    /* removed localStorage sync */);
     
     // Save to Firestore
     try {
@@ -3293,7 +3245,7 @@ Message: ${quickMessageText}`;
     };
     const nextReviews = [nReview, ...reviewsList];
     setReviewsList(nextReviews);
-    customStorage.setItem('ht_rev', JSON.stringify(nextReviews));
+    /* removed localStorage sync */);
 
     // Save to Firestore
     try {
@@ -3311,7 +3263,7 @@ Message: ${quickMessageText}`;
     try {
       const nextReviews = reviewsList.filter(r => r.id !== id);
       setReviewsList(nextReviews);
-      customStorage.setItem('ht_rev', JSON.stringify(nextReviews));
+      /* removed localStorage sync */);
       await deleteDoc(doc(db, 'reviews', id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'reviews/' + id);
@@ -3323,7 +3275,7 @@ Message: ${quickMessageText}`;
       try {
         const nextList = escalationsList.filter(t => t.id !== ticketId);
         setEscalationsList(nextList);
-        customStorage.setItem('ht_escalations', JSON.stringify(nextList));
+        /* removed localStorage sync */);
         await deleteDoc(doc(db, 'escalations', ticketId));
         alert(`🗑️ Ticket #${ticketId} deleted successfully.`);
       } catch (err) {
@@ -3338,7 +3290,7 @@ Message: ${quickMessageText}`;
         const nextList = managerRequestsList.filter(r => r.id !== ticketId);
         setManagerRequestsList(nextList);
         setMgrTrackedTicket(null);
-        customStorage.setItem('ht_manager_requests', JSON.stringify(nextList));
+        /* removed localStorage sync */);
         await deleteDoc(doc(db, 'manager_requests', ticketId));
         alert(`🗑️ Manager Ticket #${ticketId} deleted successfully.`);
       } catch (err) {
@@ -3351,7 +3303,7 @@ Message: ${quickMessageText}`;
     if (window.confirm('⚠️ Are you sure you want to delete this promotional deal?')) {
       const updated = dealsList.filter(d => d.id !== id);
       setDealsList(updated);
-      customStorage.setItem('ht_deals', JSON.stringify(updated));
+      setDoc(doc(db, 'app_settings', 'deals'), { data: updated }, { merge: true });
     }
   };
 
@@ -3981,7 +3933,7 @@ Message: ${quickMessageText}`;
                     if (matchedItem) {
                       const nextCache = { ...imageCache };
                       delete nextCache[matchedItem.idVal.toString()];
-                      customStorage.setItem('ht_img_cache', JSON.stringify(nextCache));
+                      setDoc(doc(db, 'app_settings', 'img_cache'), { data: nextCache }, { merge: true });
                       setImageCache(nextCache);
                     }
                   }
@@ -7698,7 +7650,7 @@ Message: ${quickMessageText}`;
                 onToggleMgrStatus={() => {
                   const val = mgrStatus === 'available' ? 'busy' as const : 'available' as const;
                   setMgrStatus(val);
-                  customStorage.setItem('ht_mgrstatus', val);
+                  setDoc(doc(db, 'app_settings', 'mgrstatus'), { data: val }, { merge: true });
                 }}
                 onUpdateBankAccount={handleUpdateBankAccount}
                 onAddCustomDeal={handleAddCustomDeal}
@@ -7820,7 +7772,7 @@ Message: ${quickMessageText}`;
                   ];
                   const updated = [...spreadsheetRows, newRow];
                   setSpreadsheetRows(updated);
-                  customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                  setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: updated } }, { merge: true });
                   setCsvUploadStatus(`⚠️ Unsaved changes: 1 new row appended. Click "Save & Sync Live Store" below.`);
                 };
 
@@ -8223,7 +8175,7 @@ Message: ${quickMessageText}`;
                                             if (window.confirm(`Are you sure you want to delete Product Code "${row[2] || 'this item'}"? (Make sure to click "Save & Sync Live Store" when done)`)) {
                                               const updated = spreadsheetRows.filter((_, idx) => idx !== absoluteIdx);
                                               setSpreadsheetRows(updated);
-                                              customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                              setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: updated } }, { merge: true });
                                               setCsvUploadStatus(`⚠️ Unsaved changes: deleted row #${absoluteIdx + 1}. Click "Save & Sync Live Store".`);
                                             }
                                           }}
@@ -8259,7 +8211,7 @@ Message: ${quickMessageText}`;
                                                 const updated = [...spreadsheetRows];
                                                 updated[editingCell.rIdx][editingCell.cIdx] = editingCell.value;
                                                 setSpreadsheetRows(updated);
-                                                customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                                setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: updated } }, { merge: true });
                                                 setEditingCell(null);
                                                 setCsvUploadStatus(`⚠️ Unsaved changes: edited cell at Row ${editingCell.rIdx + 1}. Click "Save & Sync Live Store"`);
                                               }}
@@ -8268,7 +8220,7 @@ Message: ${quickMessageText}`;
                                                   const updated = [...spreadsheetRows];
                                                   updated[editingCell.rIdx][editingCell.cIdx] = editingCell.value;
                                                   setSpreadsheetRows(updated);
-                                                  customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                                  setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: updated } }, { merge: true });
                                                   setEditingCell(null);
                                                   setCsvUploadStatus(`⚠️ Unsaved changes: edited cell at Row ${editingCell.rIdx + 1}. Click "Save & Sync Live Store"`);
                                                 } else if (e.key === 'Escape') {
@@ -8418,7 +8370,7 @@ Message: ${quickMessageText}`;
                                   const finalRow = draftRowValues ? draftRowValues : [...spreadsheetRows[activeEditRowIdx]];
                                   updated[activeEditRowIdx] = finalRow;
                                   setSpreadsheetRows(updated);
-                                  customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(updated));
+                                  setDoc(doc(db, 'app_settings', 'spreadsheet'), { rows: { data: updated } }, { merge: true });
                                   setActiveEditRowIdx(null);
                                   setDraftRowValues(null);
                                   setCsvUploadStatus(`⚠️ Unsaved changes: Row #${activeEditRowIdx + 1} updated. Click "Save & Sync Live Store" below.`);

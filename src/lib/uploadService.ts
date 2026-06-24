@@ -11,8 +11,15 @@ export async function uploadFile(filename: string, base64Data: string): Promise<
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Server returned status ${response.status}`);
+      const errorText = await response.text();
+      let errorMessage = `Server returned status ${response.status}`;
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error) errorMessage = errorData.error;
+      } catch (e) {
+        errorMessage = `Status ${response.status} - ${errorText.substring(0, 100)}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

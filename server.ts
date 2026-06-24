@@ -48,6 +48,17 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Error handling middleware for JSON parser errors (e.g. payload too large)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: "Invalid JSON payload format." });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: "File too large. Maximum size is 50MB." });
+  }
+  next(err);
+});
+
 const api_key = process.env.GEMINI_API_KEY;
 
 const ai = api_key && api_key !== 'MY_GEMINI_API_KEY' ? new GoogleGenAI({
