@@ -310,12 +310,25 @@ import { handleUpload } from '@vercel/blob/client';
 
 app.post('/api/upload/vercel-blob', async (req, res) => {
   try {
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token || !token.trim()) {
+      const errMsg = "BLOB_READ_WRITE_TOKEN environment variable is missing in the server environment. Please define it in your AI Studio Settings/Secrets.";
+      console.error(`[Vercel Blob Token Error] ${errMsg}`);
+      return res.status(400).json({ error: errMsg });
+    }
+    if (!token.startsWith("vercel_blob_rw_")) {
+      const errMsg = `BLOB_READ_WRITE_TOKEN must start with 'vercel_blob_rw_'. The provided secret starts with '${token.substring(0, 8)}...' which appears to be a Vercel Project ID or Org ID instead of a Blob Read/Write Token. Please go to Vercel -> Storage -> Blob -> Create Database, then copy the BLOB_READ_WRITE_TOKEN value.`;
+      console.error(`[Vercel Blob Token Error] ${errMsg}`);
+      return res.status(400).json({ error: errMsg });
+    }
+
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,
       onBeforeGenerateToken: async (pathname) => {
         return {
           allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+          token: token
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
@@ -324,6 +337,7 @@ app.post('/api/upload/vercel-blob', async (req, res) => {
     });
     return res.status(200).json(jsonResponse);
   } catch (error: any) {
+    console.error("[Vercel Blob Token Exception]:", error);
     return res.status(400).json({ error: error.message });
   }
 });

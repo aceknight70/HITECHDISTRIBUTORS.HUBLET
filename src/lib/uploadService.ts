@@ -37,7 +37,29 @@ export async function uploadFile(filename: string, base64Data: string): Promise<
     return newBlob.url;
   } catch (error: any) {
     console.error("[Upload] Error uploading file:", error?.message || error);
-    alert(`⚠️ Upload Alert:\n\nFailed to upload file.\n\nTechnical details: ${error?.message || error}`);
+    
+    let diagnosticMsg = error?.message || String(error);
+    try {
+      // Query the token endpoint with a dummy token generation request to extract precise backend setup diagnostic messages
+      const dryRunRes = await fetch('/api/upload/vercel-blob', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          type: 'blob.generate-token', 
+          payload: { pathname: 'test.jpg', callbackUrl: 'test' } 
+        })
+      });
+      if (!dryRunRes.ok) {
+        const dryRunData = await dryRunRes.json();
+        if (dryRunData && dryRunData.error) {
+          diagnosticMsg = dryRunData.error;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not retrieve precise server-side diagnostic:", e);
+    }
+
+    alert(`⚠️ Upload Alert:\n\nFailed to upload file.\n\nTechnical details: ${diagnosticMsg}`);
     throw error;
   }
 }
