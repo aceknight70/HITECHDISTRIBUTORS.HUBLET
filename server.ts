@@ -12,6 +12,34 @@ import dotenv from 'dotenv';
 
 dotenv.config({ override: true });
 
+// Manual .env file override to bypass any environment variable locking from the platform/container
+try {
+  const envPath = path.join(path.resolve(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envLines = fs.readFileSync(envPath, 'utf8').split('\n');
+    for (const line of envLines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const firstEquals = trimmed.indexOf('=');
+        if (firstEquals !== -1) {
+          const key = trimmed.substring(0, firstEquals).trim();
+          let value = trimmed.substring(firstEquals + 1).trim();
+          // Strip surrounding quotes
+          if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.substring(1, value.length - 1);
+          }
+          process.env[key] = value;
+        }
+      }
+    }
+    console.log("[Server Startup] Manually overridden environment variables from .env file. Token starting with:", process.env.BLOB_READ_WRITE_TOKEN ? `${process.env.BLOB_READ_WRITE_TOKEN.substring(0, 15)}...` : 'undefined');
+  } else {
+    console.warn("[Server Startup] No .env file found on disk at:", envPath);
+  }
+} catch (envErr: any) {
+  console.error("[Server Startup] Error during manual .env override:", envErr.message || envErr);
+}
+
 const myDirname = path.resolve();
 
 import { PRODS, SOLAR } from './src/data.ts';
