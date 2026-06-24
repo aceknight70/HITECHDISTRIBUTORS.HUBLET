@@ -10,7 +10,7 @@ import fs from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const myDirname = path.resolve();
 
