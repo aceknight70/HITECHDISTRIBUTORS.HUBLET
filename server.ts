@@ -305,6 +305,29 @@ Include a 2-3 sentence technician's explanation suggesting the likely underlying
   }
 });
 
+// API Endpoint: Vercel Blob token generator for client-side uploads
+import { handleUpload } from '@vercel/blob/client';
+
+app.post('/api/upload/vercel-blob', async (req, res) => {
+  try {
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => {
+        return {
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('Vercel Blob upload completed', blob.url);
+      },
+    });
+    return res.status(200).json(jsonResponse);
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
 // Create uploads folder if it doesn't exist
 const uploadsDir = path.join(myDirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -337,8 +360,8 @@ if (fs.existsSync(oldUploadsDir) && oldUploadsDir !== uploadsDir) {
 // Serve uploaded images statically
 app.use('/uploads', express.static(uploadsDir));
 
-// API Endpoint: LOCAL DEPLOYMENT IMAGE UPLOAD (Cloudinary Alternative)
-app.post('/api/upload', (req, res) => {
+// API Endpoint: DEPLOYMENT IMAGE UPLOAD (Supports server-side Vercel Blob CDN upload and Base64 fallback)
+app.post('/api/upload', async (req, res) => {
   try {
     const { filename, base64Data } = req.body;
     if (!filename || !base64Data) {
@@ -352,15 +375,47 @@ app.post('/api/upload', (req, res) => {
     }
 
     const buffer = Buffer.from(cleanBase64, 'base64');
-    
-    // Clean up filename to prevent directory traversal
     const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const finalFilename = `${Date.now()}_${safeFilename}`;
-    const filePath = path.join(uploadsDir, finalFilename);
 
-    fs.writeFileSync(filePath, buffer);
+    // 1. If a valid Vercel Blob Token is present, do a direct server-side upload to Vercel Blob CDN
+    const hasValidBlobToken = process.env.BLOB_READ_WRITE_TOKEN && 
+                              process.env.BLOB_READ_WRITE_TOKEN.trim() !== "" && 
+                              process.env.BLOB_READ_WRITE_TOKEN.startsWith("vercel_blob_rw_");
 
-    res.json({ url: `/uploads/${finalFilename}` });
+    if (hasValidBlobToken) {
+      try {
+        console.log(`[Server Upload] Valid Vercel Blob token detected. Uploading to Vercel Blob CDN: ${finalFilename}...`);
+        const { put } = await import('@vercel/blob');
+        const blobResult = await put(finalFilename, buffer, {
+          access: 'public',
+        });
+        console.log(`[Server Upload] Vercel Blob upload successful: ${blobResult.url}`);
+        return res.json({ url: blobResult.url });
+      } catch (blobErr: any) {
+        console.warn("[Server Upload] Server-side Vercel Blob upload failed:", blobErr.message || blobErr);
+      }
+    } else if (process.env.BLOB_READ_WRITE_TOKEN) {
+      console.log("[Server Upload] Vercel Blob token detected but lacks correct 'vercel_blob_rw_' prefix. Skipping to local/Base64 fallbacks.");
+    }
+
+    // 2. Fallback: Write locally on disk (useful for backups/ZIP download)
+    try {
+      const filePath = path.join(uploadsDir, finalFilename);
+      fs.writeFileSync(filePath, buffer);
+      console.log(`[Server Upload] Local file fallback written successfully: ${filePath}`);
+    } catch (fsErr: any) {
+      console.warn("[Server Upload] Local file write failed (expected on serverless platforms):", fsErr.message);
+    }
+
+    // Return the Base64 data URL directly so that the uploaded image can be shared across all preview containers (Dev/Shared) instantly and reliably!
+    console.log(`[Server Upload] Returning Base64 data URL fallback for shared preview compatibility.`);
+    let responseUrl = base64Data;
+    if (!responseUrl.startsWith('data:')) {
+      responseUrl = `data:image/jpeg;base64,${responseUrl}`;
+    }
+    return res.json({ url: responseUrl });
+
   } catch (error: any) {
     console.error("Local file upload error:", error);
     res.status(500).json({ error: error.message || "Failed to save file" });

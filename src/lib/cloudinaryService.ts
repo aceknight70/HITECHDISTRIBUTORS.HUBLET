@@ -77,15 +77,20 @@ export async function uploadImageToCDNOrLocal(
     }
   }
 
-  // Local static server /api/upload fallback
-  console.log(`[Upload Fallback] Uploading ${filename} to local container server...`);
+  // Server Upload Fallback (handles Vercel Blob on the server and falls back to Base64 data URLs for seamless cross-container rendering)
+  console.log(`[Upload Fallback] Uploading ${filename} to server...`);
   try {
+    let filePayload = base64Data;
+    if (!filePayload.startsWith('data:')) {
+      filePayload = `data:image/jpeg;base64,${filePayload}`;
+    }
+
     const localController = new AbortController();
-    const localTimeoutId = setTimeout(() => localController.abort(), 8000); // 8 second timeout
+    const localTimeoutId = setTimeout(() => localController.abort(), 12000); // 12 second timeout
     const uploadRes = await fetch('/api/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, base64Data }),
+      body: JSON.stringify({ filename, base64Data: filePayload }),
       signal: localController.signal
     });
     clearTimeout(localTimeoutId);
@@ -93,14 +98,18 @@ export async function uploadImageToCDNOrLocal(
     if (uploadRes.ok) {
       const uploadData = await uploadRes.json();
       if (uploadData && uploadData.url) {
+        console.log(`[Upload Fallback] Server upload successful! URL: ${uploadData.url}`);
         return uploadData.url;
       }
     }
-    
-    console.warn(`[Upload Fallback] Local server responded with status ${uploadRes.status}. Falling back to storing Base64 Data URL directly.`);
-    return base64Data;
-  } catch (err: any) {
-    console.warn("[Upload Fallback] Local server unreachable. Falling back to storing Base64 Data URL directly. Details: ", err?.message || err);
-    return base64Data;
+  } catch (localErr: any) {
+    console.warn("[Upload Fallback] Server upload failed: ", localErr?.message || localErr);
   }
+
+  console.warn("[Upload Fallback] Storing Base64 Data URL directly.");
+  let filePayload = base64Data;
+  if (!filePayload.startsWith('data:')) {
+    filePayload = `data:image/jpeg;base64,${filePayload}`;
+  }
+  return filePayload;
 }
