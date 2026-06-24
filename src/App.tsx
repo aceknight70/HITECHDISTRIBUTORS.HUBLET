@@ -284,7 +284,22 @@ export default function App() {
 
     try {
       localStorage.setItem('ht_products', JSON.stringify(nextList));
-      await setDoc(doc(db, 'products', String(prod.id)), prod);
+      // Sanitize the product to exactly match standard schema keys & size limits defined in security rules
+      const cleanProduct: any = {
+        id: Number(prod.id),
+        pn: String(prod.pn || '').substring(0, 128),
+        cat: String(prod.cat || 'laptops').substring(0, 128),
+        n: String(prod.n || '').substring(0, 256),
+        sp: String(prod.sp || '').substring(0, 2000),
+        price: String(prod.price || 'CALL').substring(0, 128),
+        desc: String(prod.desc || '').substring(0, 5000),
+      };
+      if (typeof prod.promo === 'boolean') cleanProduct.promo = prod.promo;
+      if (typeof prod.newp === 'boolean') cleanProduct.newp = prod.newp;
+      if (prod.imageUrl) cleanProduct.imageUrl = String(prod.imageUrl).substring(0, 1000000);
+      if (prod.displayOrder) cleanProduct.displayOrder = String(prod.displayOrder).substring(0, 64);
+
+      await setDoc(doc(db, 'products', String(prod.id)), cleanProduct);
     } catch (e) {
       console.warn("Error saving product to Cloud Firestore: ", e);
       throw e;
@@ -329,7 +344,19 @@ export default function App() {
 
     try {
       localStorage.setItem('ht_solar_products', JSON.stringify(nextList));
-      await setDoc(doc(db, 'solar_products', solar.id), solar);
+      // Sanitize the solar product to exactly match solar schema keys & size limits defined in security rules
+      const cleanSolarProduct: any = {
+        id: String(solar.id || '').substring(0, 128),
+        cat: String(solar.cat || 'Inverters').substring(0, 128),
+        n: String(solar.n || '').substring(0, 256),
+        brand: String(solar.brand || 'Generic').substring(0, 128),
+        sp: String(solar.sp || '').substring(0, 2000),
+        price: String(solar.price || '₦').substring(0, 128),
+      };
+      if (solar.desc) cleanSolarProduct.desc = String(solar.desc).substring(0, 5000);
+      if (solar.imageUrl) cleanSolarProduct.imageUrl = String(solar.imageUrl).substring(0, 1000000);
+
+      await setDoc(doc(db, 'solar_products', solar.id), cleanSolarProduct);
     } catch (e) {
       console.warn("Error saving solar product to Cloud Firestore: ", e);
       throw e;
@@ -1084,16 +1111,16 @@ export default function App() {
 
     const formatted = uniquePhotos.map((photo: any) => {
       const item: any = {
-        id: String(photo.id),
-        url: photo.url,
-        label: photo.label,
-        sub: photo.sub || '',
-        productCode: photo.productCode || '',
-        price: photo.price || '',
+        id: String(photo.id).substring(0, 128),
+        url: String(photo.url || '').substring(0, 1000000),
+        label: String(photo.label || '').substring(0, 256),
+        sub: String(photo.sub || '').substring(0, 1000),
+        productCode: String(photo.productCode || '').substring(0, 128),
+        price: String(photo.price || '').substring(0, 128),
         isCustom: !!photo.isCustom
       };
       if (photo.fallbackUrl) {
-        item.fallbackUrl = photo.fallbackUrl;
+        item.fallbackUrl = String(photo.fallbackUrl).substring(0, 1000000);
       }
       return item;
     });
