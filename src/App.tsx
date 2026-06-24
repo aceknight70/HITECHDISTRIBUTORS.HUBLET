@@ -273,6 +273,7 @@ export default function App() {
       await setDoc(doc(db, 'products', String(prod.id)), prod);
     } catch (e) {
       console.warn("Error saving product to Cloud Firestore: ", e);
+      throw e;
     }
   };
 
@@ -317,6 +318,7 @@ export default function App() {
       await setDoc(doc(db, 'solar_products', solar.id), solar);
     } catch (e) {
       console.warn("Error saving solar product to Cloud Firestore: ", e);
+      throw e;
     }
   };
 
@@ -470,6 +472,7 @@ export default function App() {
   // Direct modal/forms for inline action pipeline
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingSolar, setEditingSolar] = useState<SolarProduct | null>(null);
+  const [isSavingProductSpecs, setIsSavingProductSpecs] = useState<boolean>(false);
   const [editingGallery, setEditingGallery] = useState<any | null>(null);
   const [showCreateProductModal, setShowCreateProductModal] = useState<boolean>(false);
   const [createProductCat, setCreateProductCat] = useState<string>('laptops');
@@ -4877,15 +4880,30 @@ Message: ${quickMessageText}`;
 
                         <button
                           type="button"
+                          disabled={isSavingProductSpecs}
                           onClick={async () => {
                             if (!editingProduct.pn.trim()) return alert("Part number/code is required!");
-                            await handleSaveProduct(editingProduct);
-                            setEditingProduct(null);
-                            alert("✅ Specifications successfully saved!");
+                            try {
+                              setIsSavingProductSpecs(true);
+                              await handleSaveProduct(editingProduct);
+                              setEditingProduct(null);
+                              alert("✅ Specifications successfully saved!");
+                            } catch (err: any) {
+                              alert("❌ Error saving specifications: " + err.message);
+                            } finally {
+                              setIsSavingProductSpecs(false);
+                            }
                           }}
-                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
+                          className="w-full py-2 bg-[#F5C518] disabled:opacity-50 disabled:cursor-not-allowed text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors flex items-center justify-center gap-1.5"
                         >
-                          Apply System Specs
+                          {isSavingProductSpecs ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                              <span>Applying Specs...</span>
+                            </>
+                          ) : (
+                            <span>Apply System Specs</span>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -5023,15 +5041,30 @@ Message: ${quickMessageText}`;
 
                         <button
                           type="button"
+                          disabled={isSavingProductSpecs}
                           onClick={async () => {
                             if (!editingSolar.id.trim()) return alert("Code/ID is required!");
-                            await handleSaveSolarProduct(editingSolar);
-                            setEditingSolar(null);
-                            alert("✅ Solar packaging updated successfully!");
+                            try {
+                              setIsSavingProductSpecs(true);
+                              await handleSaveSolarProduct(editingSolar);
+                              setEditingSolar(null);
+                              alert("✅ Solar packaging updated successfully!");
+                            } catch (err: any) {
+                              alert("❌ Error updating solar specs: " + err.message);
+                            } finally {
+                              setIsSavingProductSpecs(false);
+                            }
                           }}
-                          className="w-full py-2 bg-[#F5C518] text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors"
+                          className="w-full py-2 bg-[#F5C518] disabled:opacity-50 disabled:cursor-not-allowed text-black hover:bg-amber-500 font-extrabold text-xs uppercase rounded-lg transition-colors flex items-center justify-center gap-1.5"
                         >
-                          Save Solar Configurations
+                          {isSavingProductSpecs ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                              <span>Applying Specs...</span>
+                            </>
+                          ) : (
+                            <span>Save Solar Configurations</span>
+                          )}
                         </button>
                       </div>
                     </div>
