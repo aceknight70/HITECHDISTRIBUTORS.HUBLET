@@ -157,6 +157,14 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    match /app_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    match /deals/{dealId} {
+      allow read, write: if true;
+    }
+
     // Rule match block: Catalog Videos
     match /videos/{videoId} {
       allow read: if true;

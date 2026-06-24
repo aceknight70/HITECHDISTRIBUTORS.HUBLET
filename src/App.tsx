@@ -30,9 +30,10 @@ import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 
 const customStorage = {
   setItem: (key: string, value: string) => {
+    try { window.localStorage.setItem(key, value); } catch (e) {}
     // We only care about syncing the items that aren't already syncing via collection snapshots.
     // The collections (products, repairs, requests, etc.) already have Firestore setDoc/deleteDoc logic.
-    // So for them, customStorage.setItem is a no-op fallback.
+    // So for them, customStorage.setItem is a local fallback.
     const settingsKeys = ['ht_cart', 'ht_solar_cart', 'ht_bank_acc', 'ht_deals', 'ht_contacts', 'ht_opening_photo', 'ht_live_embed', 'ht_display_floor_active', 'ht_display_floor_saved', 'ht_spreadsheet_id', 'ht_csv_upload_status', 'ht_img_cache', 'ht_mgrstatus', 'ht_staff_login', 'ht_staff_role'];
     if (settingsKeys.includes(key)) {
        const shortKey = key.replace('ht_', '');
@@ -48,8 +49,12 @@ const customStorage = {
        setDoc(doc(db, 'app_settings', 'spreadsheet'), { [shortKey]: { data: parsed } }, { merge: true }).catch(console.warn);
     }
   },
-  getItem: (key: string) => null,
-  removeItem: (key: string) => {}
+  getItem: (key: string) => {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  },
+  removeItem: (key: string) => {
+    try { window.localStorage.removeItem(key); } catch (e) {}
+  }
 };
 
 import { compressImage } from './lib/imageCompressor';
@@ -2666,16 +2671,18 @@ const DEFAULT_HARDCODED_CSV = [
       handleSyncSpreadsheetToDatabase(spreadsheetHeaders, DEFAULT_HARDCODED_CSV, true, true);
     } else if (name === "Workbook Display" || name === "Last Imported Sheet") {
       try {
-        const lastRowsStr = customStorage.getItem('ht_last_imported_rows');
-        const lastHeadersStr = customStorage.getItem('ht_last_imported_headers');
-        if (lastRowsStr && lastHeadersStr) {
-          const rows = JSON.parse(lastRowsStr);
-          const headers = JSON.parse(lastHeadersStr);
-          setSpreadsheetHeaders(headers);
-          setSpreadsheetRows(rows);
-          customStorage.setItem('ht_spreadsheet_rows', lastRowsStr);
-          customStorage.setItem('ht_spreadsheet_headers', lastHeadersStr);
-          handleSyncSpreadsheetToDatabase(headers, rows, true, true);
+        const docSnap = await getDoc(doc(db, 'app_settings', 'spreadsheet'));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.last_imported_rows && data.last_imported_headers) {
+            const rows = data.last_imported_rows.data;
+            const headers = data.last_imported_headers.data;
+            setSpreadsheetHeaders(headers);
+            setSpreadsheetRows(rows);
+            customStorage.setItem('ht_spreadsheet_rows', JSON.stringify(rows));
+            customStorage.setItem('ht_spreadsheet_headers', JSON.stringify(headers));
+            handleSyncSpreadsheetToDatabase(headers, rows, true, true);
+          }
         }
       } catch (e) {
         console.warn(e);
