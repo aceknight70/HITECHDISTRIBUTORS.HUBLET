@@ -329,13 +329,16 @@ export default function StaffRoom({
     let successCount = 0;
     const newPhotosList: any[] = [];
     
-     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith('image/')) {
-        continue;
-      }
-      
-      const p = new Promise<void>((resolve) => {
+    const fileArray = Array.from(files).filter(file => file.type.startsWith('image/'));
+    
+    if (fileArray.length === 0) {
+      setPdfError("No valid image files detected to upload.");
+      setImgUploading(false);
+      return;
+    }
+
+    const uploadPromises = fileArray.map((file) => {
+      return new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = async () => {
           try {
@@ -378,14 +381,15 @@ export default function StaffRoom({
         };
         reader.readAsDataURL(file);
       });
-      await p;
-    }
+    });
+
+    await Promise.all(uploadPromises);
     
     if (newPhotosList.length > 0) {
       const merged = [...newPhotosList, ...galleryPhotos];
       onUpdateGalleryPhotos(merged);
       setUploadedPhotosCount(prev => prev + successCount);
-      alert(`📤 Uploaded ${successCount} raw photo assets. They are staged in the active list and ready for code matching!`);
+      alert(`📤 Uploaded ${successCount} raw photo assets in parallel! They are staged in the active list and ready for code matching.`);
     } else {
       setPdfError("No valid image files detected to upload.");
     }
@@ -858,7 +862,8 @@ export default function StaffRoom({
     reader.onloadend = async () => {
       const dataUrl = reader.result as string;
       try {
-        const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+        const compressedDataUrl = await compressImage(dataUrl);
+        const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
         setNewImageUrl(finalUrl);
       } catch (err) {
         console.error("Staff room photo saving fell back to local memory base64:", err);
@@ -1933,7 +1938,8 @@ export default function StaffRoom({
                                           reader.onloadend = async () => {
                                             const dataUrl = reader.result as string;
                                             try {
-                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+                                              const compressedDataUrl = await compressImage(dataUrl);
+                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
                                               setEditingProdForm(prev => ({ ...prev, imageUrl: finalUrl }));
                                             } catch (err) {
                                               setEditingProdForm(prev => ({ ...prev, imageUrl: dataUrl }));
@@ -2152,7 +2158,8 @@ export default function StaffRoom({
                                           reader.onloadend = async () => {
                                             const dataUrl = reader.result as string;
                                             try {
-                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, dataUrl, cloudinaryConfig);
+                                              const compressedDataUrl = await compressImage(dataUrl);
+                                              const finalUrl = await uploadImageToCDNOrLocal(file.name, compressedDataUrl, cloudinaryConfig);
                                               setEditingSolarForm(prev => ({ ...prev, imageUrl: finalUrl }));
                                             } catch (err) {
                                               setEditingSolarForm(prev => ({ ...prev, imageUrl: dataUrl }));
